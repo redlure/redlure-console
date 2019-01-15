@@ -112,3 +112,6 @@ logs/
 
 # database file
 redlure.db
+
+# temporary folder
+temp/

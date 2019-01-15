@@ -9,6 +9,8 @@ flask-migrate = "*"
 flask = "*"
 marshmallow = "*"
 flask-mail = "*"
+flask-script = "*"
+flask-user = "*"
 
 [dev-packages]
 

@@ -17,6 +17,7 @@ login = LoginManager(app)
 login.login_view = 'login'
 
 from app import routes, models
+from app.models import User, Role
 
 if not app.debug:
 
@@ -34,3 +35,27 @@ if not app.debug:
 
     app.logger.setLevel(logging.INFO)
     app.logger.info('redlure-server startup')
+
+# does not work unless database has already been created
+'''
+# if no roles exist in database, add base roles
+if db.session.query(Role).count() == 0:
+    print('No roles found in database - initializing default roles')
+    administrator = Role(name='Defualt Administrator', role_type='Administrator')
+    user = Role(name='Defualt User', role_type='User') 
+    client = Role(name='Defualt Client', role_type='Client')
+    db.session.add(administrator)
+    db.session.add(user)
+    db.session.add(client)
+    db.session.commit()
+
+# if no users exist in database, add default admin
+if db.session.query(User).count() == 0:
+    print('No users found in database - initializing default admin user')
+    admin = User(username='admin', role_id=1)
+    admin.set_password('redlure')
+    db.session.add(admin)
+    db.session.commit()
+'''
+
+

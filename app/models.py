@@ -7,12 +7,50 @@ import app
 from flask import jsonify
 
 
-# User Classes
+role_access = db.Table('role access',
+    db.Column('role_id', db.Integer, db.ForeignKey('role.id'), primary_key=True),
+    db.Column('client_id', db.Integer, db.ForeignKey('client.id'), primary_key=True)
+)
 
+# Client Classes
+class Client(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True)
+
+    def __repr__(self):
+        return '<Client {}>'.format(self.name)
+
+
+class ClientSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+
+
+# Role Classes
+class Role(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True)
+    role_type = db.Column(db.String(64))
+    clients = db.relationship('Client', secondary=role_access, lazy=True, backref=db.backref('clients', lazy=True))
+    users = db.relationship('User', backref='role', lazy=True)
+
+    def __repr__(self):
+        return '<Role {}>'.format(self.name)
+
+
+class RoleSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    role_type = fields.Str()
+    clients = fields.Nested(ClientSchema, many=True)
+
+
+# User Classes
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True)
     password_hash = db.Column(db.String(128))
+    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
 
     # set the user's password
     def set_password(self, password):
@@ -29,33 +67,13 @@ class User(UserMixin, db.Model):
 class UserSchema(Schema):
     id = fields.Number()
     username = fields.Str()
+    role = fields.Nested(RoleSchema)
     
 
 @login.user_loader
 def load_user(id):
     return User.query.get(int(id))
 
-'''
-# Role Classes
-class Role(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64))
-    admin = db.Column(db.String(64))
-    user = db.Column(db.Boolean)
-    client = db.Column(db.Boolean)
-
-    def __repr__(self):
-        return '<Role {}>'.format(self.name)
-
-
-# Client Classes
-class Client(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64))
-
-    def __repr__(self):
-        return '<Client {}>'.format(self.name)
-'''
 
 # Sending Profile Classes
 class Profile(db.Model):
