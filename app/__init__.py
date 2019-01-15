@@ -37,7 +37,6 @@ if not app.debug:
     app.logger.info('redlure-server startup')
 
 # does not work unless database has already been created
-'''
 # if no roles exist in database, add base roles
 if db.session.query(Role).count() == 0:
     print('No roles found in database - initializing default roles')
@@ -56,6 +55,5 @@ if db.session.query(User).count() == 0:
     admin.set_password('redlure')
     db.session.add(admin)
     db.session.commit()
-'''
 
 

@@ -4,7 +4,7 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool
+from app.functions import convert_to_bool, admin_login_required, user_login_required
 import json
 
 
@@ -46,6 +46,7 @@ def logout():
 
 @app.route('/home')
 @login_required
+@user_login_required
 def home():
     '''
     home page
@@ -56,6 +57,7 @@ def home():
 # handles requests to add users or get all users
 @app.route('/users', methods=['GET', 'POST'])
 @login_required
+@admin_login_required
 def users():
     '''
     For GET requests, return all users
@@ -82,11 +84,12 @@ def users():
             db.session.add(user)
             db.session.commit()
             print('User %s added to the database' % username)
-            return 'success'
+            return 'success', 201
 
 
 @app.route('/profiles', methods=['POST', 'GET'])
 @login_required
+@user_login_required
 def profiles():
     '''
     For GET requests, return all profiles
@@ -111,20 +114,21 @@ def profiles():
         profile = Profile.query.filter_by(name=name).first()
         ssl_bool = convert_to_bool(ssl)
         tls_bool = convert_to_bool(tls)
-        if profile is None and type(ssl_bool) == bool and type(tls_bool) == bool:
+        if profile is not None:
+            return 'profile already exists', 400
+        elif type(ssl_bool) == bool and type(tls_bool) == bool:
+            return 'ssl/tls must be either true or false', 400
+        else:
             profile = Profile(name=name, from_address=from_address, smtp_host=host, smtp_port=port, username=username, password=password, tls=tls_bool, ssl=ssl_bool)
             db.session.add(profile)
             db.session.commit()
             print('Profile %s added to the database' % name)
-            return 'success'
-        else:
-            print('failed to enter into database')
-            return 'failed to enter into database'
+            return 'success', 201
 
 
-# URL accepting post data to send a test email from a specific sending profile
 @app.route('/profiles/<profile_name>', methods=['GET', 'POST', 'DELETE'])
 @login_required
+@user_login_required
 def profile(profile_name):
     '''
     For GET requests, return the profile with the given name
@@ -144,17 +148,19 @@ def profile(profile_name):
     elif request.method == 'DELETE':
         profile = Profile.query.filter_by(name=profile_name).first()
         if profile is None:
-            return 'profile does not exist'
+            return 'profile does not exist', 404
         else:
             db.session.delete(profile)
             db.session.commit()
-            return 'profile deleted'
+            return 'profile deleted', 204
 
     # request is a POST
     else:
         address = request.form.get('Address')
         profile = Profile.query.filter_by(name=profile_name).first()
-        if profile is not None:
+        if profile is None:
+            return 'Profile does not exist', 404
+        else:
             mail = Mail(app)
             app.config['MAIL_SERVER'] = profile.smtp_host
             app.config['MAIL_PORT'] = profile.smtp_port
@@ -167,12 +173,11 @@ def profile(profile_name):
             msg.html = "<text>Hello Flask message sent from Flask-Mail</text>"
             mail.send(msg)
             return 'Test email sent'
-        else:
-            return 'Profile does not exist'
 
 
 @app.route('/clients', methods=['GET', 'POST'])
 @login_required
+@user_login_required
 def clients():
     '''
     For GET requests, return all clients
@@ -194,13 +199,14 @@ def clients():
                 admin.clients.append(client)
             db.session.add(client)
             db.session.commit()
-            return 'success'
+            return 'success', 201
         else:
             return 'client already exists', 400
 
 
 @app.route('/roles', methods=['GET', 'POST'])
 @login_required
+@admin_login_required
 def roles():
     '''
     For GET requests, return all clients
@@ -215,13 +221,13 @@ def roles():
         name = request.form.get('Name')
         role_type = request.form.get('Role_Type')
         role = Role.query.filter_by(name=name).first()
-        if role is not none:
+        if role is not None:
             return 'role already exists with that name', 400
         elif role_type.lower() not in ['administrator', 'user', 'client']:
-            return 'role type not admin, user, or client'
+            return 'role type not admin, user, or client', 400
         else:
             role = Role(name=name, role_type=role_type)
             db.session.add(role)
             db.session.commit()       
-            return 'success' 
+            return 'success', 201
     
