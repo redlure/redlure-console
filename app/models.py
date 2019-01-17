@@ -18,6 +18,7 @@ class Workspace(db.Model):
     name = db.Column(db.String(64), unique=True, nullable=False)
     lists = db.relationship('List', backref='lists', lazy=True, cascade='all,delete')
     profiles = db.relationship('Profile', backref='profiles', lazy=True, cascade='all,delete')
+    emails = db.relationship('Email', backref='emails', lazy=True, cascade='all,delete')
 
     def __repr__(self):
         return '<Workspace {}>'.format(self.name)
@@ -89,6 +90,7 @@ class Profile(db.Model):
     tls = db.Column(db.Boolean, default=False, nullable=False)
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
+    campaigns = db.relationship('Campaign', backref='campaigns', lazy=True)
 
 
     def __repr__(self):
@@ -113,7 +115,7 @@ class Person(db.Model):
     first_name = db.Column(db.String(64))
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
-    target_list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
+    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
 
     def __repr__(self):
         return '<Person {}>'.format(self.email)
@@ -132,6 +134,7 @@ class List(db.Model):
     name = db.Column(db.String(64), nullable=False)
     targets = db.relationship('Person', backref='list', lazy=True, cascade='all,delete')
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
+    #campaigns = db.relationship('Campaign', backref='campaigns', lazy=True)
 
     def __repr__(self):
         return '<Target List {}>'.format(self.name)
@@ -143,3 +146,33 @@ class ListSchema(Schema):
     name = fields.Str()
     targets = fields.Nested(PersonSchema, many=True)
     workspace_id = fields.Number()
+
+
+# Email Classes
+class Email(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    html = db.Column(db.LargeBinary)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
+    #campaigns = db.relationship('Campaign', backref='campaigns', lazy=True)
+
+    def __repr__(self):
+        return '<Email {}>'.format(self.name)
+
+
+class EmailSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    html = fields.Str()
+
+
+# Campaign Classes
+class Campaign(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
+    profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
+    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
+
+    def __repr__(self):
+        return '<Email {}>'.format(self.name)

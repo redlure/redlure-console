@@ -19,6 +19,7 @@ login.login_view = 'login'
 from app import routes, models
 from app.models import User, Role, Workspace, Profile, List, Person
 
+
 if not app.debug:
 
     # create logs dir if it does not exist
@@ -36,13 +37,28 @@ if not app.debug:
     app.logger.setLevel(logging.INFO)
     app.logger.info('redlure-server startup')
 
-# does not work unless database has already been created
+# initialize the database if it does not already exist
+try:
+    db.session.query(User).count()
+except:
+    db.create_all()
+
+# add general workspace
+if db.session.query(Workspace).count() == 0:
+    general_ws = Workspace(name='General')
+    db.session.add(general_ws)
+    db.session.commit()
+
 # if no roles exist in database, add base roles
 if db.session.query(Role).count() == 0:
     print('No roles found in database - initializing default roles')
     administrator = Role(name='Defualt Administrator', role_type='Administrator')
     user = Role(name='Defualt User', role_type='User') 
     client = Role(name='Defualt Client', role_type='Client')
+    general_ws = Workspace.query.filter_by(id=1, name='General').first()
+    if general_ws is not None:
+            administrator.workspaces.append(general_ws)
+            user.workspaces.append(general_ws)
     db.session.add(administrator)
     db.session.add(user)
     db.session.add(client)

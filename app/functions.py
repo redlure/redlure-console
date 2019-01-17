@@ -4,6 +4,9 @@ from flask_login import current_user
 import re
 
 
+def init_roles():
+    print('hi')
+
 def validate_email_format(email):
     '''
     Returns True if a given email address has an '@' with a '.' for a later character

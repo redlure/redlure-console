@@ -257,6 +257,8 @@ def workspace(workspace_id):
 
     # request is a DELETE
     elif request.method == 'DELETE':
+        if workspace.name == 'General' and workspace.id == 1:
+            return 'cannot delete General workspace', 400
         db.session.delete(workspace)
         db.session.commit()
         return 'workspace deleted', 204
@@ -282,21 +284,29 @@ def roles():
     For GET requests, return all workspaces
     For POST requests, add a new workspace
     '''
+
+    # request is a GET
     if request.method == 'GET':
         all_roles = Role.query.all()
         schema = RoleSchema(many=True, strict=True)
         roles = schema.dump(all_roles)
         return jsonify(roles)
-    else:
+
+    # request is a POST
+    elif request.method == 'POST':
         name = request.form.get('Name')
         role_type = request.form.get('Role_Type')
         role = Role.query.filter_by(name=name).first()
         if role is not None:
             return 'role already exists with that name', 400
-        elif role_type.lower() not in ['administrator', 'user', 'workspace']:
-            return 'role type not admin, user, or workspace', 400
+        elif role_type.lower() not in ['administrator', 'user', 'client']:
+            return 'role type not admin, user, or client', 400
         else:
             role = Role(name=name, role_type=role_type)
+            if role.role_type in ['administrator', 'user']:
+                general_ws = Workspace.query.filter_by(id=1, name='General').first()
+                if general_ws is not None:
+                    role.workspaces.append(general_ws)
             db.session.add(role)
             db.session.commit()       
             return 'success', 201
@@ -398,7 +408,7 @@ def targets(workspace_id, list_id):
 
     # request is a GET
     if request.method == 'GET':
-        targets = Person.query.filter_by(target_list_id=list_id)
+        targets = Person.query.filter_by(list_id=list_id)
         schema = PersonSchema(many=True, strict=True)
         all_targets = schema.dump(targets)
         return jsonify(all_targets)
@@ -429,7 +439,7 @@ def target(workspace_id, list_id, target_id):
     if targetlist is None:
         return 'list does not exist', 404
 
-    target = Person.query.filter_by(id=target_id, target_list_id=list_id).first()
+    target = Person.query.filter_by(id=target_id, list_id=list_id).first()
     if target is None:
         return 'target does not exist'
 
