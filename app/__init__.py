@@ -17,7 +17,7 @@ login = LoginManager(app)
 login.login_view = 'login'
 
 from app import routes, models
-from app.models import User, Role
+from app.models import User, Role, Workspace, Profile, List, Person
 
 if not app.debug:
 
@@ -55,5 +55,3 @@ if db.session.query(User).count() == 0:
     admin.set_password('redlure')
     db.session.add(admin)
     db.session.commit()
-
-

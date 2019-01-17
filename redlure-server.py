@@ -1,5 +1,5 @@
 from app import app, db
-from app.models import User, Profile, Role, Client
+from app.models import User, Profile, Role, Workspace, List, Person
 
 # objects to initialize 'flask shell' with
 @app.shell_context_processor
@@ -9,5 +9,7 @@ def make_shell_context():
         'User': User,
         'Profile': Profile,
         'Role': Role,
-        'Client': Client
+        'Workspace': Workspace,
+        'List': List,
+        'Person': Person
     }

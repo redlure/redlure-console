@@ -1,10 +1,10 @@
 from flask import request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Client, ClientSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format
 import json
 
 
@@ -87,16 +87,20 @@ def users():
             return 'success', 201
 
 
-@app.route('/profiles', methods=['POST', 'GET'])
+@app.route('/workspaces/<workspace_id>/profiles', methods=['POST', 'GET'])
 @login_required
 @user_login_required
-def profiles():
+def profiles(workspace_id):
     '''
     For GET requests, return all profiles
     For POST requests, add a new profile
     '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+        return 'workspace does not exist', 404
+
     if request.method == 'GET':
-        all_profiles = Profile.query.all()
+        all_profiles = Profile.query.filter_by(workspace_id=workspace_id).all()
         schema = ProfileSchema(many=True, strict=True)
         profiles = schema.dump(all_profiles)
         return jsonify(profiles)
@@ -116,50 +120,51 @@ def profiles():
         tls_bool = convert_to_bool(tls)
         if profile is not None:
             return 'profile already exists', 400
-        elif type(ssl_bool) == bool and type(tls_bool) == bool:
+        elif type(ssl_bool) != bool or type(tls_bool) != bool:
             return 'ssl/tls must be either true or false', 400
         else:
-            profile = Profile(name=name, from_address=from_address, smtp_host=host, smtp_port=port, username=username, password=password, tls=tls_bool, ssl=ssl_bool)
+            profile = Profile(name=name, from_address=from_address, smtp_host=host, smtp_port=port, \
+                username=username, password=password, tls=tls_bool, ssl=ssl_bool, workspace_id=workspace_id)
             db.session.add(profile)
             db.session.commit()
             print('Profile %s added to the database' % name)
             return 'success', 201
 
 
-@app.route('/profiles/<profile_name>', methods=['GET', 'POST', 'DELETE'])
+@app.route('/workspaces/<workspace_id>/profiles/<profile_id>', methods=['GET', 'POST', 'DELETE', 'PUT'])
 @login_required
 @user_login_required
-def profile(profile_name):
+def profile(workspace_id, profile_id):
     '''
     For GET requests, return the profile with the given name
     For POST requests, use the given profile to send a test email
     For DELETE requests, delete the given profile
     '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+        return 'workspace does not exist', 404
+
+    profile = Profile.query.filter_by(id=profile_id, workspace_id=workspace_id).first()
+    if profile is None:
+        return 'profile does not exist', 404
 
     # request is a GET
     if request.method == 'GET':
-        print (profile_name)
-        profile = Profile.query.filter_by(name=profile_name).first()
         schema = ProfileSchema(strict=True)
         profile_data = schema.dump(profile)
         return jsonify(profile_data)
 
     # request is a DELETE
     elif request.method == 'DELETE':
-        profile = Profile.query.filter_by(name=profile_name).first()
-        if profile is None:
-            return 'profile does not exist', 404
-        else:
-            db.session.delete(profile)
-            db.session.commit()
-            return 'profile deleted', 204
+        db.session.delete(profile)
+        db.session.commit()
+        return 'profile deleted', 204
 
     # request is a POST
-    else:
+    elif request.method == 'POST':
         address = request.form.get('Address')
-        profile = Profile.query.filter_by(name=profile_name).first()
-        if profile is None:
-            return 'Profile does not exist', 404
+        if not validate_email_format(address):
+            return 'Enter a valid email address', 400
         else:
             mail = Mail(app)
             app.config['MAIL_SERVER'] = profile.smtp_host
@@ -172,36 +177,101 @@ def profile(profile_name):
             msg = Message('Hello', sender = profile.from_address, recipients = [address])
             msg.html = "<text>Hello Flask message sent from Flask-Mail</text>"
             mail.send(msg)
-            return 'Test email sent'
+            return 'Test email sent', 200
+    
+    # request is a PUT
+    elif request.method == 'PUT':
+        name = request.form.get('Name')
+        from_address = request.form.get('From_Address')
+        host = request.form.get('SMTP_Host')
+        port = request.form.get('SMTP_Port')
+        username = request.form.get('Username')
+        password = request.form.get('Password')
+        tls = request.form.get('TLS')
+        ssl = request.form.get('SSL')
+
+        ssl_bool = convert_to_bool(ssl)
+        tls_bool = convert_to_bool(tls)
+
+        if type(ssl_bool) != bool or type(tls_bool) != bool:
+            return 'ssl/tls must be either true or false', 400
+        else:
+            profile.name = name
+            profile.from_address = from_address
+            profile.smtp_host = host
+            profile.smtp_port = port
+            profile.username = username
+            profile.password = password
+            profile.tls = tls_bool
+            profile.ssl = ssl_bool
+            profile.workspace_id = workspace_id
+            
+            db.session.commit()
+            return 'updated', 200
 
 
-@app.route('/clients', methods=['GET', 'POST'])
+@app.route('/workspaces', methods=['GET', 'POST'])
 @login_required
 @user_login_required
-def clients():
+def workspaces():
     '''
-    For GET requests, return all clients
-    For POST requests, add a new client
+    For GET requests, return all workspaces
+    For POST requests, add a new workspace
     '''
     if request.method == 'GET':
-        all_clients = Client.query.all()
-        schema = ClientSchema(many=True, strict=True)
-        clients = schema.dump(all_clients)
-        return jsonify(clients)
+        all_workspaces = Workspace.query.all()
+        schema = WorkspaceSchema(many=True, strict=True)
+        workspaces = schema.dump(all_workspaces)
+        return jsonify(workspaces)
     else:
         # request is a POST
         name = request.form.get('Name')
-        client = Client.query.filter_by(name=name).first()
-        if client is None:
-            client = Client(name=name)
+        workspace = Workspace.query.filter_by(name=name).first()
+        if workspace is None:
+            workspace = Workspace(name=name)
             admins = Role.query.filter_by(role_type='Administrator').all()
             for admin in admins:
-                admin.clients.append(client)
-            db.session.add(client)
+                admin.workspaces.append(workspace)
+            db.session.add(workspace)
             db.session.commit()
             return 'success', 201
         else:
-            return 'client already exists', 400
+            return 'workspace already exists', 400
+
+
+@app.route('/workspaces/<workspace_id>', methods=['GET', 'PUT', 'DELETE'])
+def workspace(workspace_id):
+    '''
+    For GET requests, return the given workspace's info
+    For PUT requests, update given workspace's info
+    For DELETE requets, delete the given workspace
+    '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+            return 'workspace does not exist', 404
+    # request is a GET
+    if request.method == 'GET':
+        schema = WorkspaceSchema(strict=True)
+        workspace_data = schema.dump(workspace)
+        return jsonify(workspace_data)
+
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(workspace)
+        db.session.commit()
+        return 'workspace deleted', 204
+
+    elif request.method == 'PUT':
+        name = request.form.get('Name')
+        workspace_name = Workspace.query.filter_by(name=name).first()
+        if workspace_name is not None:
+            return 'workspace with that name already exists', 400
+        elif name is None or name == '':
+            return 'provide a non-null name', 400
+        else:
+            workspace.name = name
+            db.session.commit()
+            return 'workspace updated', 200
 
 
 @app.route('/roles', methods=['GET', 'POST'])
@@ -209,8 +279,8 @@ def clients():
 @admin_login_required
 def roles():
     '''
-    For GET requests, return all clients
-    For POST requests, add a new client
+    For GET requests, return all workspaces
+    For POST requests, add a new workspace
     '''
     if request.method == 'GET':
         all_roles = Role.query.all()
@@ -223,11 +293,87 @@ def roles():
         role = Role.query.filter_by(name=name).first()
         if role is not None:
             return 'role already exists with that name', 400
-        elif role_type.lower() not in ['administrator', 'user', 'client']:
-            return 'role type not admin, user, or client', 400
+        elif role_type.lower() not in ['administrator', 'user', 'workspace']:
+            return 'role type not admin, user, or workspace', 400
         else:
             role = Role(name=name, role_type=role_type)
             db.session.add(role)
             db.session.commit()       
             return 'success', 201
+
+
+@app.route('/workspaces/<workspace_id>/lists', methods = ['GET', 'POST'])
+@login_required
+@user_login_required
+def targetlists(workspace_id):
+    '''
+    For GET requests, return all target lists associated with the given workspace
+    For POST requests, add a new list to the given workspace
+    '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+        return 'workspace does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        workspace_lists = List.query.filter_by(workspace_id=workspace_id).all()
+        schema = ListSchema(many=True, strict=True)
+        list_data = schema.dump(workspace_lists)
+        return jsonify(list_data)
     
+    # request is a POST
+    elif request.method == 'POST':
+        req_json = request.get_json()
+        name = req_json['name']
+        targets = req_json['targets']
+        list_name = List.query.filter_by(workspace_id=workspace_id, name=name).first()
+        if list_name is not None:
+            return 'workspace already has a list with that name', 400
+        else:
+            new_list = List(name=name, workspace_id=workspace_id)
+            for target in targets:
+                person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
+                new_list.targets.append(person)
+            db.session.add(new_list)
+            db.session.commit()
+            return 'success', 201
+
+
+@app.route('/workspaces/<workspace_id>/lists/<list_id>', methods = ['GET', 'PUT', 'DELETE'])
+@login_required
+@user_login_required
+def targetlist(workspace_id, list_id):
+    '''
+    For GET requests, return the given list
+    For PUT requests, udpate the given list
+    For DELETE requests, delete the given list
+    '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+        return 'workspace does not exist', 404
+
+    targetlist = List.query.filter_by(id=list_id, workspace_id=workspace_id).first()
+    if targetlist is None:
+        return 'list does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        schema = ListSchema(strict=True)
+        list_data = schema.dump(targetlist)
+        return jsonify(list_data)
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(targetlist)
+        db.session.commit()
+        return '', 204
+    # request is a PUT (update attributes of the List)
+    elif request.method == 'PUT':
+        name = request.form.get('Name')
+        workspace_name = request.form.get('Workspace_Name')
+        workspace = Workspace.query.filter_by(name=workspace_name).first()
+        if workspace is None:
+            return 'new workspace does not exist', 404
+        targetlist.name = name
+        targetlist.workspace_id = workspace.id
+        db.session.commit()
+        return 'updated', 200

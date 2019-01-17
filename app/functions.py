@@ -1,6 +1,19 @@
 # file of miscellaneous functions for the backend application
 from functools import wraps
 from flask_login import current_user
+import re
+
+
+def validate_email_format(email):
+    '''
+    Returns True if a given email address has an '@' with a '.' for a later character
+    '''
+    email_reg = re.compile(r'[^@]+@[^@]+\.[^@]+')
+    if email_reg.match(email):
+        return True
+    else:
+        return False
+
 
 def admin_login_required(f):
     '''
