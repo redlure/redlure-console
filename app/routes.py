@@ -205,7 +205,7 @@ def profile(workspace_id, profile_id):
             profile.tls = tls_bool
             profile.ssl = ssl_bool
             profile.workspace_id = workspace_id
-            
+
             db.session.commit()
             return 'updated', 200
 
@@ -366,14 +366,73 @@ def targetlist(workspace_id, list_id):
         db.session.delete(targetlist)
         db.session.commit()
         return '', 204
+
     # request is a PUT (update attributes of the List)
     elif request.method == 'PUT':
-        name = request.form.get('Name')
-        workspace_name = request.form.get('Workspace_Name')
-        workspace = Workspace.query.filter_by(name=workspace_name).first()
-        if workspace is None:
-            return 'new workspace does not exist', 404
+        req_json = request.get_json()
+        name = req_json['name']
+        targets = req_json['targets']
+        for target in targets:
+            person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
+            targetlist.targets.append(person)
         targetlist.name = name
-        targetlist.workspace_id = workspace.id
         db.session.commit()
         return 'updated', 200
+
+
+@app.route('/workspaces/<workspace_id>/lists/<list_id>/targets', methods=['POST', 'GET'])
+@login_required
+@user_login_required
+def targets(workspace_id, list_id):
+    '''
+    For GET requets, return all targets of the given list
+    For POST requests, add a target to the given list
+    '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+        return 'workspace does not exist', 404
+
+    targetlist = List.query.filter_by(id=list_id, workspace_id=workspace_id).first()
+    if targetlist is None:
+        return 'list does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        targets = Person.query.filter_by(target_list_id=list_id)
+        schema = PersonSchema(many=True, strict=True)
+        all_targets = schema.dump(targets)
+        return jsonify(all_targets)
+
+    # request is a POST
+    if request.method == 'POST':
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        email = request.form.get('email')
+        person = Person(first_name=first_name, last_name=last_name, email=email)
+        targetlist.targets.append(person)
+        db.session.commit()
+    return 'added person', 201
+
+
+@app.route('/workspaces/<workspace_id>/lists/<list_id>/targets/<target_id>', methods=['DELETE'])
+@login_required
+@user_login_required
+def target(workspace_id, list_id, target_id):
+    '''
+    For DELETE requests, delete the given target from the given list
+    '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+        return 'workspace does not exist', 404
+
+    targetlist = List.query.filter_by(id=list_id, workspace_id=workspace_id).first()
+    if targetlist is None:
+        return 'list does not exist', 404
+
+    target = Person.query.filter_by(id=target_id, target_list_id=list_id).first()
+    if target is None:
+        return 'target does not exist'
+
+    db.session.delete(target)
+    db.session.commit()
+    return 'deleted', 204
