@@ -87,6 +87,91 @@ def users():
             return 'success', 201
 
 
+@app.route('/domains', methods=['GET', 'POST'])
+@login_required
+@user_login_required
+def domains():
+    '''
+    For GET requests, return all domains
+    For POST requests, add a new domain
+    '''
+
+    # request is a GET
+    if request.method == 'GET':
+        all_domains = Domain.query.all()
+        schema = DomainSchema(many=True, strict=True)
+        domain_data = schema.dump(all_domains)
+        return jsonify(domain_data)
+
+    # request is a POST
+    elif request.method == 'POST':
+        domain = request.form.get('Domain')
+        cert_path = request.form.get('Cert_Path')
+        key_path = request.form.get('Key_Path')
+
+        domain_obj = Domain.query.filter_by(domain=domain).first()
+        if domain_obj is not None:
+            return 'domain already exists', 400
+        
+        domain_obj = Domain(domain=domain, cert_path=cert_path, key_path=key_path)
+        domain_obj.update_ip()
+        db.session.add(domain_obj)
+        db.session.commit()
+        return 'domain added', 201
+
+
+@app.route('/domains/refresh', methods=['GET'])
+@login_required
+@user_login_required
+def refresh_domains():
+    all_domains = Domain.query.all()
+    for domain in all_domains:
+        domain.update_ip()
+    db.session.commit()
+    return redirect('/domains')
+
+
+@app.route('/domains/<domain_id>', methods=['GET', 'PUT', 'DELETE'])
+@login_required
+@user_login_required
+def domain(domain_id):
+    '''
+    For GET requests, return the given domain (and refresh the IP in case of update)
+    For PUT requests, update the existing domain
+    FOR DELETE requests, delete the given domain
+    '''
+
+    domain_obj = Domain.query.filter_by(id=domain_id).first()
+    if domain_obj is None:
+        return 'domain does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        domain_obj.update_ip()
+        schema = DomainSchema(strict=True)
+        domain_data = schema.dump(domain_obj)
+        return jsonify(domain_data)
+
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(domain_obj)
+        db.session.commit()
+        return 'deleted', 204
+    
+    # request is a PUT
+    elif request.method == 'PUT':
+        domain = request.form.get('Domain')
+        cert_path = request.form.get('Cert_Path')
+        key_path = request.form.get('Key_Path')
+
+        domain_obj.domain = domain
+        domain_obj.cert_path = cert_path
+        domain_obj.key_path = key_path
+        domain_obj.update_ip()
+        db.session.commit()
+        return 'domain updated'
+
+
 @app.route('/workspaces/<workspace_id>/profiles', methods=['POST', 'GET'])
 @login_required
 @user_login_required

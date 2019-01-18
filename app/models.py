@@ -57,12 +57,16 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128))
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
 
-    # set the user's password
     def set_password(self, password):
+        '''
+        Hash the given string and store as the user's password
+        '''
         self.password_hash = generate_password_hash(password)
 
-    # evalute a given string against the user's stored password hash
     def check_password(self, password):
+        '''
+        Hash the given string and check it against the stored password hash 
+        '''
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
@@ -195,19 +199,26 @@ class CampaignSchema(Schema):
 # Domain Classes
 class Domain(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    domain = db.Column(db.String(64), nullable=False)
+    domain = db.Column(db.String(64), unique=True, nullable=False)
     ip = db.Column(db.String(64))
     cert_path = db.Column(db.String(128))
     key_path = db.Column(db.String(128))
     campaigns = db.relationship('Campaign', backref='domain', lazy=True)
 
     def __repr__(self):
-        return '<Campaign {}>'.format(self.name)
+        print('hit')
+        return '<Domain {}>'.format(self.name)
 
     def update_ip(self):
-        new_ip = gethostbyname(self.domain)
-        if new_ip != self.ip:
-            self.ip = new_ip
+        '''
+        Get the IP address that the domain name is pointed at
+        '''
+        try:
+            new_ip = gethostbyname(self.domain)
+            if new_ip != self.ip:
+                self.ip = new_ip
+        except:
+            self.ip = 'Domain not found'
 
 
 class DomainSchema(Schema):
