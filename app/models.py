@@ -5,6 +5,7 @@ from marshmallow import Schema, fields
 from flask_mail import Mail, Message
 import app
 from flask import jsonify
+from socket import gethostbyname
 
 
 role_access = db.Table('role access',
@@ -16,9 +17,10 @@ role_access = db.Table('role access',
 class Workspace(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
-    lists = db.relationship('List', backref='lists', lazy=True, cascade='all,delete')
-    profiles = db.relationship('Profile', backref='profiles', lazy=True, cascade='all,delete')
-    emails = db.relationship('Email', backref='emails', lazy=True, cascade='all,delete')
+    lists = db.relationship('List', backref='workspace', lazy=True, cascade='all,delete')
+    profiles = db.relationship('Profile', backref='workspace', lazy=True, cascade='all,delete')
+    emails = db.relationship('Email', backref='workspace', lazy=True, cascade='all,delete')
+    campaigns = db.relationship('Campaign', backref='workspace', lazy=True, cascade='all,delete')
 
     def __repr__(self):
         return '<Workspace {}>'.format(self.name)
@@ -90,7 +92,7 @@ class Profile(db.Model):
     tls = db.Column(db.Boolean, default=False, nullable=False)
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    campaigns = db.relationship('Campaign', backref='campaigns', lazy=True)
+    campaigns = db.relationship('Campaign', backref='profile', lazy=True)
 
 
     def __repr__(self):
@@ -134,7 +136,7 @@ class List(db.Model):
     name = db.Column(db.String(64), nullable=False)
     targets = db.relationship('Person', backref='list', lazy=True, cascade='all,delete')
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    #campaigns = db.relationship('Campaign', backref='campaigns', lazy=True)
+    campaigns = db.relationship('Campaign', backref='list', lazy=True)
 
     def __repr__(self):
         return '<Target List {}>'.format(self.name)
@@ -154,7 +156,7 @@ class Email(db.Model):
     name = db.Column(db.String(64), nullable=False)
     html = db.Column(db.LargeBinary)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    #campaigns = db.relationship('Campaign', backref='campaigns', lazy=True)
+    campaigns = db.relationship('Campaign', backref='email', lazy=True)
 
     def __repr__(self):
         return '<Email {}>'.format(self.name)
@@ -170,9 +172,47 @@ class EmailSchema(Schema):
 class Campaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
+    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
 
     def __repr__(self):
-        return '<Email {}>'.format(self.name)
+        return '<Campaign {}>'.format(self.name)
+
+
+class CampaignSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    workspace_id = fields.Number()
+    email_id = fields.Number()
+    profile_id = fields.Number()
+    list_id = fields.Number()
+    domain_id = fields.Number()
+
+
+# Domain Classes
+class Domain(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    domain = db.Column(db.String(64), nullable=False)
+    ip = db.Column(db.String(64))
+    cert_path = db.Column(db.String(128))
+    key_path = db.Column(db.String(128))
+    campaigns = db.relationship('Campaign', backref='domain', lazy=True)
+
+    def __repr__(self):
+        return '<Campaign {}>'.format(self.name)
+
+    def update_ip(self):
+        new_ip = gethostbyname(self.domain)
+        if new_ip != self.ip:
+            self.ip = new_ip
+
+
+class DomainSchema(Schema):
+    id = fields.Number()
+    domain = fields.Str()
+    ip = fields.Str()
+    cert_path = fields.Str()
+    key_path = fields.Str()
