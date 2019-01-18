@@ -206,17 +206,14 @@ class Domain(db.Model):
     campaigns = db.relationship('Campaign', backref='domain', lazy=True)
 
     def __repr__(self):
-        print('hit')
-        return '<Domain {}>'.format(self.name)
+        return '<Domain {}>'.format(self.domain)
 
     def update_ip(self):
         '''
         Get the IP address that the domain name is pointed at
         '''
         try:
-            new_ip = gethostbyname(self.domain)
-            if new_ip != self.ip:
-                self.ip = new_ip
+            self.ip = gethostbyname(self.domain)
         except:
             self.ip = 'Domain not found'
 

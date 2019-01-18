@@ -2,6 +2,39 @@
 from functools import wraps
 from flask_login import current_user
 import re
+from app.models import Workspace, Email, Profile, List, Domain
+
+
+def validate_campaign_makeup(workspace_id, email_name, profile_name, list_name, domain_name):
+    '''
+    Return a message and HTTP error code if a given database object does not exist
+    '''
+    email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
+    profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
+    targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
+    domain = Domain.query.filter_by(domain=domain_name).first()
+
+    if email is None:
+        return 'email invalid', 404
+    
+    if profile is None:
+        return 'profile invalid', 404
+
+    if targetlist is None:
+        return 'list invalid', 404
+
+    if domain is None:
+        return 'domain invalid', 404
+
+
+def validate_workspace(workspace_id):
+    '''
+    Returns True if the given Workspace ID exists in the database
+    '''
+    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    if workspace is None:
+        return False
+    return True
 
 
 def validate_email_format(email):

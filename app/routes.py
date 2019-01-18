@@ -4,7 +4,7 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup
 import json
 
 
@@ -180,8 +180,7 @@ def profiles(workspace_id):
     For GET requests, return all profiles
     For POST requests, add a new profile
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
-    if workspace is None:
+    if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
 
     if request.method == 'GET':
@@ -225,8 +224,7 @@ def profile(workspace_id, profile_id):
     For POST requests, use the given profile to send a test email
     For DELETE requests, delete the given profile
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
-    if workspace is None:
+    if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
 
     profile = Profile.query.filter_by(id=profile_id, workspace_id=workspace_id).first()
@@ -405,8 +403,7 @@ def targetlists(workspace_id):
     For GET requests, return all target lists associated with the given workspace
     For POST requests, add a new list to the given workspace
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
-    if workspace is None:
+    if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
 
     # request is a GET
@@ -443,8 +440,7 @@ def targetlist(workspace_id, list_id):
     For PUT requests, udpate the given list
     For DELETE requests, delete the given list
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
-    if workspace is None:
+    if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
 
     targetlist = List.query.filter_by(id=list_id, workspace_id=workspace_id).first()
@@ -483,8 +479,7 @@ def targets(workspace_id, list_id):
     For GET requets, return all targets of the given list
     For POST requests, add a target to the given list
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
-    if workspace is None:
+    if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
 
     targetlist = List.query.filter_by(id=list_id, workspace_id=workspace_id).first()
@@ -516,8 +511,7 @@ def target(workspace_id, list_id, target_id):
     '''
     For DELETE requests, delete the given target from the given list
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
-    if workspace is None:
+    if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
 
     targetlist = List.query.filter_by(id=list_id, workspace_id=workspace_id).first()
@@ -531,3 +525,104 @@ def target(workspace_id, list_id, target_id):
     db.session.delete(target)
     db.session.commit()
     return 'deleted', 204
+
+
+@app.route('/workspaces/<workspace_id>/emails', methods=['GET', 'POST'])
+@login_required
+@user_login_required
+def emails(workspace_id):
+    '''
+    For GET requests, return all emails for the given workspace
+    For POST requests, add a new email to the given workspace
+    '''
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        all_emails = Email.query.filter_by(workspace_id=workspace_id).all()
+        schema = EmailSchema(many=True, strict=True)
+        email_data = schema.dump(all_emails)
+        return jsonify(email_data)
+
+    # request is a POST
+    elif request.method == 'POST':
+        name = request.form.get('Name')
+        html = request.form.get('HTML').encode()
+
+        email = Email(name=name, html=html, workspace_id=workspace_id)
+        db.session.add(email)
+        db.session.commit()
+        return 'email added', 201
+
+
+@app.route('/workspaces/<workspace_id>/emails/<email_id>', methods=['GET', 'PUT', 'DELETE'])
+@login_required
+@user_login_required
+def email(workspace_id, email_id):
+    '''
+    For GET requests, return the given email
+    For DELETE requests, delete the given email
+    For PUT requests, update the given email
+    '''
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    email = Email.query.filter_by(id=email_id, workspace_id=workspace_id).first()
+    if email is None:
+        return 'email does not exist', 404
+
+    #request is a GET
+    if request.method == 'GET':
+        schema = EmailSchema(strict=True)
+        email_data = schema.dump(email)
+        return jsonify(email_data)
+
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(email)
+        db.session.commit()
+        return 'deleted', 204
+    
+    # request is a PUT
+    elif request.method == 'PUT':
+        name = request.form.get('Name')
+        html = request.form.get('HTML').encode()
+
+        email.name = name
+        email.html = html
+        db.session.commit()
+        return 'email updated'
+
+
+@app.route('/workspaces/<workspace_id>/campaigns', methods=['GET', 'POST'])
+@login_required
+@user_login_required
+def campaigns(workspace_id):
+    '''
+    For GET requests, return all campaigns for the given workspace
+    For POST requests, all a campaign to the given workspace
+    '''
+
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        all_campaigns = Campaign.query.all()
+        schema = CampaignSchema(many=True, strict=True)
+        campaign_data = schema.dump(all_campaigns)
+        return jsonify(campaign_data)
+
+    # request is a POST
+    elif request.method == 'POST':
+        name = request.form.get('Name')
+        email_name = request.form.get('Email_Name')
+        profile_name = request.form.get('Profile_Name')
+        list_name = request.form.get('List_Name')
+        domain_name = request.form.get('Domain_Name')
+
+        makeup = validate_campaign_makeup(workspace_id, email_name, profile_name, list_name, domain_name)
+        if makeup:
+            return makeup
+        return 'real'
