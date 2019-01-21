@@ -3,17 +3,34 @@ from functools import wraps
 from flask_login import current_user
 import re
 from app.models import Workspace, Email, Profile, List, Domain
+from flask_mail import Mail, Message
+from app import app
 
 
-def validate_campaign_makeup(workspace_id, email_name, profile_name, list_name, domain_name):
+def send_mail(profile, subject, html, addresses):
+    if type(addresses) != list:
+        addresses = [addresses]
+    try:
+        app.config['MAIL_SERVER'] = profile.smtp_host
+        app.config['MAIL_PORT'] = profile.smtp_port
+        app.config['MAIL_USERNAME'] = profile.username
+        app.config['MAIL_PASSWORD'] = profile.password
+        app.config['MAIL_USE_TLS'] = profile.tls
+        app.config['MAIL_USE_SSL'] = True #profile.ssl
+        mail = Mail(app)
+        msg = Message(subject=subject, sender=profile.from_address, recipients=addresses)
+        msg.html = "<text>Hello Flask message sent from Flask-Mail</text>"
+        mail.send(msg)
+        return 'test email sent', 200
+    except Exception as error:
+        return error
+    
+
+
+def validate_campaign_makeup(email, profile, targetlist, domain):
     '''
-    Return a message and HTTP error code if a given database object does not exist
+    Return a message and HTTP error code if a given campaign module does not exist.
     '''
-    email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
-    profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
-    targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
-    domain = Domain.query.filter_by(domain=domain_name).first()
-
     if email is None:
         return 'email invalid', 404
     

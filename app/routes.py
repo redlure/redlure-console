@@ -4,7 +4,7 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, send_mail
 import json
 
 
@@ -249,18 +249,16 @@ def profile(workspace_id, profile_id):
         if not validate_email_format(address):
             return 'Enter a valid email address', 400
         else:
-            mail = Mail(app)
-            app.config['MAIL_SERVER'] = profile.smtp_host
-            app.config['MAIL_PORT'] = profile.smtp_port
-            app.config['MAIL_USERNAME'] = profile.username
-            app.config['MAIL_PASSWORD'] = profile.password
-            app.config['MAIL_USE_TLS'] = profile.tls
-            app.config['MAIL_USE_SSL'] = profile.ssl
-            mail = Mail(app)
-            msg = Message('Hello', sender = profile.from_address, recipients = [address])
-            msg.html = "<text>Hello Flask message sent from Flask-Mail</text>"
-            mail.send(msg)
-            return 'Test email sent', 200
+            subject = 'redlure test email'
+            html = "<text>Hello Flask message sent from Flask-Mail</text>"
+            status = send_mail(profile, subject, html, address)
+
+            # if matches 'good' return from functions.send_mail()
+            if status == ['test email sent', 200]:
+                return status
+            else:
+                print(status)
+                return 'error sending test' % status, 400
     
     # request is a PUT
     elif request.method == 'PUT':
@@ -622,7 +620,74 @@ def campaigns(workspace_id):
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
 
-        makeup = validate_campaign_makeup(workspace_id, email_name, profile_name, list_name, domain_name)
+        email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
+        profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
+        targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
+        domain = Domain.query.filter_by(domain=domain_name).first()
+
+        # make sure all given modules exist before continuing
+        makeup = validate_campaign_makeup(email, profile, targetlist, domain)
         if makeup:
             return makeup
-        return 'real'
+        
+        campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
+            list_id=targetlist.id, domain_id=domain.id)
+        db.session.add(campaign)
+        db.session.commit()
+        return 'campaign created', 201
+
+
+@app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>', methods=['GET', 'DELETE', 'PUT'])
+@login_required
+@user_login_required
+def campaign(workspace_id, campaign_id):
+    '''
+    For GET requests, return the given campaign
+    For DELETE requests, delete the given campaign
+    For PUT requests, update the given campaign
+    '''
+
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    campaign = Campaign.query.filter_by(id=campaign_id, workspace_id=workspace_id).first()
+    if campaign is None:
+        return 'campaign does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        schema = CampaignSchema(strict=True)
+        campaign_data = schema.dump(campaign)
+        return jsonify(campaign_data)
+
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(campaign)
+        db.session.commit()
+        return 'campaign deleted', 204
+
+    # request is a PUT
+    elif request.method == 'PUT':
+        name = request.form.get('Name')
+        email_name = request.form.get('Email_Name')
+        profile_name = request.form.get('Profile_Name')
+        list_name = request.form.get('List_Name')
+        domain_name = request.form.get('Domain_Name')
+
+        email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
+        profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
+        targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
+        domain = Domain.query.filter_by(domain=domain_name).first()
+
+        # make sure all given modules exist before continuing
+        makeup = validate_campaign_makeup(email, profile, targetlist, domain)
+        if makeup:
+            return makeup
+
+        campaign.name = name
+        campaign.email_id = email.id
+        campaign.profile_id = profile.id
+        campaign.list_id = targetlist.id
+        campaign.domain_id = domain.id
+        db.session.commit()
+        return 'campaign updated'
