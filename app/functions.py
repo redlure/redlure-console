@@ -7,26 +7,6 @@ from flask_mail import Mail, Message
 from app import app
 
 
-def send_mail(profile, subject, html, addresses):
-    if type(addresses) != list:
-        addresses = [addresses]
-    try:
-        app.config['MAIL_SERVER'] = profile.smtp_host
-        app.config['MAIL_PORT'] = profile.smtp_port
-        app.config['MAIL_USERNAME'] = profile.username
-        app.config['MAIL_PASSWORD'] = profile.password
-        app.config['MAIL_USE_TLS'] = profile.tls
-        app.config['MAIL_USE_SSL'] = True #profile.ssl
-        mail = Mail(app)
-        msg = Message(subject=subject, sender=profile.from_address, recipients=addresses)
-        msg.html = "<text>Hello Flask message sent from Flask-Mail</text>"
-        mail.send(msg)
-        return 'test email sent', 200
-    except Exception as error:
-        return error
-    
-
-
 def validate_campaign_makeup(email, profile, targetlist, domain):
     '''
     Return a message and HTTP error code if a given campaign module does not exist.

@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from marshmallow import Schema, fields
 from flask_mail import Mail, Message
-import app
+from app import app
 from flask import jsonify
 from socket import gethostbyname
 
@@ -101,6 +101,37 @@ class Profile(db.Model):
 
     def __repr__(self):
         return '<Sending Profile {}>'.format(self.name)
+
+
+    def set_mail_configs(self):
+        app.config['MAIL_SERVER'] = self.smtp_host
+        app.config['MAIL_PORT'] = self.smtp_port
+        app.config['MAIL_USERNAME'] = self.username
+        app.config['MAIL_PASSWORD'] = self.password
+        app.config['MAIL_USE_TLS'] = self.tls
+        app.config['MAIL_USE_SSL'] = self.ssl
+
+    
+    def send_test_mail(self, address):
+        mail = Mail(app)
+        msg = Message('redlure test', sender=self.from_address, recipients=[address])
+        msg.html = "<text>Hello Flask message sent from Flask-Mail</text>"
+        mail.send(msg)
+        
+    
+    def send_mail(self, subject, html, addresses):
+        if type(addresses) != list:
+            addresses = [addresses]
+        
+        try:
+            mail = Mail(app)
+            msg = Message(subject=subject, sender=self.from_address, recipients=addresses)
+            msg.html = html
+            mail.send(msg)
+            return 'test email sent', 200
+        except Exception as error:
+            print(error)
+            return 'error', 400
 
 
 class ProfileSchema(Schema):

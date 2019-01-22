@@ -4,7 +4,7 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, send_mail
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup
 import json
 
 
@@ -249,16 +249,9 @@ def profile(workspace_id, profile_id):
         if not validate_email_format(address):
             return 'Enter a valid email address', 400
         else:
-            subject = 'redlure test email'
-            html = "<text>Hello Flask message sent from Flask-Mail</text>"
-            status = send_mail(profile, subject, html, address)
-
-            # if matches 'good' return from functions.send_mail()
-            if status == ['test email sent', 200]:
-                return status
-            else:
-                print(status)
-                return 'error sending test' % status, 400
+            profile.set_mail_configs()
+            profile.send_test_mail(address)
+            return 'test email sent', 200
     
     # request is a PUT
     elif request.method == 'PUT':
