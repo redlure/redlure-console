@@ -11,7 +11,7 @@ import json
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     '''
-    For POST requests, login the current user
+    For POST requests, login the current user.
     '''
     if current_user.is_authenticated:
         print('User is already authenticated')
@@ -38,7 +38,7 @@ def login():
 @login_required
 def logout():
     '''
-    Logout the current user
+    Logout the current user.
     '''
     logout_user()
     return redirect(url_for('login'))
@@ -49,19 +49,18 @@ def logout():
 @user_login_required
 def home():
     '''
-    home page
+    home page.
     '''
     return 'home'
 
 
-# handles requests to add users or get all users
 @app.route('/users', methods=['GET', 'POST'])
 @login_required
 @admin_login_required
 def users():
     '''
-    For GET requests, return all users
-    For POST requests, add a new user
+    For GET requests, return all users.
+    For POST requests, add a new user.
     '''
     if request.method == 'GET':
         all_users = User.query.all()
@@ -87,13 +86,39 @@ def users():
             return 'success', 201
 
 
+@app.route('/users/<user_id>', methods=['GET', 'DELETE'])
+@login_required
+@admin_login_required
+def user(user_id):
+    '''
+    For GET requests, return the given user.
+    For DELETE requests, delete the given user.
+    '''
+
+    user = User.query.filter_by(id=user_id).first()
+    if user is None:
+        return 'user does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        schema = UserSchema(strict=True)
+        user_data = schema.dump(user)
+        return jsonify(user_data)
+    
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(user)
+        db.session.commit()
+        return 'user deleted', 204
+
+
 @app.route('/domains', methods=['GET', 'POST'])
 @login_required
 @user_login_required
 def domains():
     '''
-    For GET requests, return all domains
-    For POST requests, add a new domain
+    For GET requests, return all domains.
+    For POST requests, add a new domain.
     '''
 
     # request is a GET
@@ -136,9 +161,9 @@ def refresh_domains():
 @user_login_required
 def domain(domain_id):
     '''
-    For GET requests, return the given domain (and refresh the IP in case of update)
-    For PUT requests, update the existing domain
-    FOR DELETE requests, delete the given domain
+    For GET requests, return the given domain (and refresh the IP in case of update).
+    For PUT requests, update the existing domain.
+    FOR DELETE requests, delete the given domain.
     '''
 
     domain_obj = Domain.query.filter_by(id=domain_id).first()
@@ -177,8 +202,8 @@ def domain(domain_id):
 @user_login_required
 def profiles(workspace_id):
     '''
-    For GET requests, return all profiles
-    For POST requests, add a new profile
+    For GET requests, return all profiles.
+    For POST requests, add a new profile.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -220,9 +245,9 @@ def profiles(workspace_id):
 @user_login_required
 def profile(workspace_id, profile_id):
     '''
-    For GET requests, return the profile with the given name
-    For POST requests, use the given profile to send a test email
-    For DELETE requests, delete the given profile
+    For GET requests, return the profile with the given name.
+    For POST requests, use the given profile to send a test email.
+    For DELETE requests, delete the given profile.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -249,7 +274,6 @@ def profile(workspace_id, profile_id):
         if not validate_email_format(address):
             return 'Enter a valid email address', 400
         else:
-            profile.set_mail_configs()
             profile.send_test_mail(address)
             return 'test email sent', 200
     
@@ -289,11 +313,11 @@ def profile(workspace_id, profile_id):
 @user_login_required
 def workspaces():
     '''
-    For GET requests, return all workspaces
-    For POST requests, add a new workspace
+    For GET requests, return all workspaces.
+    For POST requests, add a new workspace.
     '''
     if request.method == 'GET':
-        all_workspaces = Workspace.query.all()
+        all_workspaces = Workspace.query.filter(Workspace.roles.contains(current_user.role)).all()
         schema = WorkspaceSchema(many=True, strict=True)
         workspaces = schema.dump(all_workspaces)
         return jsonify(workspaces)
@@ -314,15 +338,18 @@ def workspaces():
 
 
 @app.route('/workspaces/<workspace_id>', methods=['GET', 'PUT', 'DELETE'])
+@login_required
+@user_login_required
 def workspace(workspace_id):
     '''
-    For GET requests, return the given workspace's info
-    For PUT requests, update given workspace's info
-    For DELETE requets, delete the given workspace
+    For GET requests, return the given workspace's info.
+    For PUT requests, update given workspace's info.
+    For DELETE requets, delete the given workspace.
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    workspace = Workspace.query.filter(Workspace.roles.contains(current_user.role)).filter_by(id=workspace_id).first()
     if workspace is None:
             return 'workspace does not exist', 404
+
     # request is a GET
     if request.method == 'GET':
         schema = WorkspaceSchema(strict=True)
@@ -355,8 +382,8 @@ def workspace(workspace_id):
 @admin_login_required
 def roles():
     '''
-    For GET requests, return all workspaces
-    For POST requests, add a new workspace
+    For GET requests, return all roles.
+    For POST requests, add a new role.
     '''
 
     # request is a GET
@@ -377,13 +404,53 @@ def roles():
             return 'role type not admin, user, or client', 400
         else:
             role = Role(name=name, role_type=role_type)
-            if role.role_type in ['administrator', 'user']:
+            if role.role_type.lower() in ['administrator', 'user']:
                 general_ws = Workspace.query.filter_by(id=1, name='General').first()
-                if general_ws is not None:
-                    role.workspaces.append(general_ws)
+                role.workspaces.append(general_ws)
             db.session.add(role)
             db.session.commit()       
             return 'success', 201
+
+
+@app.route('/roles/<role_id>', methods=['GET', 'DELETE', 'PUT'])
+@login_required
+@admin_login_required
+def role(role_id):
+    '''
+    For GET requests, return the given role.
+    For DELETE requests, delete the given role.
+    For PUT requests, update the current role.
+    '''
+
+    role = Role.query.filter_by(id=role_id).first()
+    if role is None:
+        return 'role does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        schema = RoleSchema(strict=True)
+        role_data = schema.dump(role)
+        return jsonify(role_data)
+
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(role)
+        db.session.commit()
+        return 'role deleted', 204
+
+    # TODO - make more flexible - possibly JSON 
+    # TODO - ability to remove workspaces from roles (could treat put as overwriting previous workspace relationships)
+    # request is a PUT
+    elif request.method == 'PUT':
+        ws = request.form.get('Workspace_Name')
+        workspace = Workspace.query.filter_by(name=ws).first()
+        if workspace is None:
+            return 'workspace does not exist', 404
+        if role in workspace.roles:
+            return 'role already has permissions for this workspace', 400
+        role.workspaces.append(workspace)
+        db.session.commit()
+        return 'role updated'
 
 
 @app.route('/workspaces/<workspace_id>/lists', methods = ['GET', 'POST'])
@@ -391,8 +458,8 @@ def roles():
 @user_login_required
 def targetlists(workspace_id):
     '''
-    For GET requests, return all target lists associated with the given workspace
-    For POST requests, add a new list to the given workspace
+    For GET requests, return all target lists associated with the given workspace.
+    For POST requests, add a new list to the given workspace.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -427,9 +494,9 @@ def targetlists(workspace_id):
 @user_login_required
 def targetlist(workspace_id, list_id):
     '''
-    For GET requests, return the given list
-    For PUT requests, udpate the given list
-    For DELETE requests, delete the given list
+    For GET requests, return the given list.
+    For PUT requests, udpate the given list.
+    For DELETE requests, delete the given list.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -467,8 +534,8 @@ def targetlist(workspace_id, list_id):
 @user_login_required
 def targets(workspace_id, list_id):
     '''
-    For GET requets, return all targets of the given list
-    For POST requests, add a target to the given list
+    For GET requets, return all targets of the given list.
+    For POST requests, add a target to the given list.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -500,7 +567,7 @@ def targets(workspace_id, list_id):
 @user_login_required
 def target(workspace_id, list_id, target_id):
     '''
-    For DELETE requests, delete the given target from the given list
+    For DELETE requests, delete the given target from the given list.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -523,8 +590,8 @@ def target(workspace_id, list_id, target_id):
 @user_login_required
 def emails(workspace_id):
     '''
-    For GET requests, return all emails for the given workspace
-    For POST requests, add a new email to the given workspace
+    For GET requests, return all emails for the given workspace.
+    For POST requests, add a new email to the given workspace.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -540,8 +607,8 @@ def emails(workspace_id):
     elif request.method == 'POST':
         name = request.form.get('Name')
         html = request.form.get('HTML').encode()
-
-        email = Email(name=name, html=html, workspace_id=workspace_id)
+        subject = request.form.get('Subject')
+        email = Email(name=name, html=html, subject=subject, workspace_id=workspace_id)
         db.session.add(email)
         db.session.commit()
         return 'email added', 201
@@ -552,9 +619,9 @@ def emails(workspace_id):
 @user_login_required
 def email(workspace_id, email_id):
     '''
-    For GET requests, return the given email
-    For DELETE requests, delete the given email
-    For PUT requests, update the given email
+    For GET requests, return the given email.
+    For DELETE requests, delete the given email.
+    For PUT requests, update the given email.
     '''
     if not validate_workspace(workspace_id):
         return 'workspace does not exist', 404
@@ -591,8 +658,8 @@ def email(workspace_id, email_id):
 @user_login_required
 def campaigns(workspace_id):
     '''
-    For GET requests, return all campaigns for the given workspace
-    For POST requests, all a campaign to the given workspace
+    For GET requests, return all campaigns for the given workspace.
+    For POST requests, all a campaign to the given workspace.
     '''
 
     if not validate_workspace(workspace_id):
@@ -635,9 +702,9 @@ def campaigns(workspace_id):
 @user_login_required
 def campaign(workspace_id, campaign_id):
     '''
-    For GET requests, return the given campaign
-    For DELETE requests, delete the given campaign
-    For PUT requests, update the given campaign
+    For GET requests, return the given campaign.
+    For DELETE requests, delete the given campaign.
+    For PUT requests, update the given campaign.
     '''
 
     if not validate_workspace(workspace_id):
@@ -684,3 +751,23 @@ def campaign(workspace_id, campaign_id):
         campaign.domain_id = domain.id
         db.session.commit()
         return 'campaign updated'
+
+
+@app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/cast', methods=['GET'])
+@login_required
+@user_login_required
+def cast(workspace_id, campaign_id):
+    '''
+    For GET requests, kick off the given campaign.
+    '''
+
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    campaign = Campaign.query.filter_by(id=campaign_id, workspace_id=workspace_id).first()
+    if campaign is None:
+        return 'campaign does not exist', 404
+
+    campaign.cast()
+    
+    return 'lures casted', 200
