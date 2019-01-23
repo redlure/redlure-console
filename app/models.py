@@ -6,6 +6,8 @@ from flask_mail import Mail, Message
 from app import app
 from flask import jsonify
 from socket import gethostbyname
+import string
+import random
 
 
 role_access = db.Table('role access',
@@ -126,17 +128,19 @@ class Profile(db.Model):
         mail.send(msg)
         
     
-    def send_mail(self, subject, html, addresses):
-        if type(addresses) != list:
-            addresses = [addresses]
-        
+    def send_mail(self, subject, html, targets, campaign_id):
         try:
             self.set_mail_configs()
             mail = Mail(app)
-            for address in addresses:
-                msg = Message(subject=subject, sender=self.from_address, recipients=[address])
+            for target in targets:
+                msg = Message(subject=subject, sender=self.from_address, recipients=[target.email])
                 msg.html = html
                 mail.send(msg)
+                
+                result = Result.query.filter_by(campaign_id=campaign_id, person_id=target.id).first()
+                result.status = 'Email Sent'
+                print(result)
+                db.session.commit()
         except Exception as error:
             print(error)
 
@@ -160,6 +164,7 @@ class Person(db.Model):
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
+    results = db.relationship('Result', backref='person', lazy=True)
 
 
     def __repr__(self):
@@ -223,18 +228,23 @@ class Campaign(db.Model):
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
     domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
+    results = db.relationship('Result', backref='campaign', lazy=True)
 
 
     def __repr__(self):
         return '<Campaign {}>'.format(self.name)
 
-
-    def get_list_addresses(self):
-        return [target.email for target in self.list.targets]
-
     
+    def prep_tracking(self):
+        for target in self.list.targets:
+            tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
+            result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
+            db.session.add(result)
+        db.session.commit()
+    
+
     def cast(self):
-        self.profile.send_mail(self.email.subject, self.email.html, self.get_list_addresses())
+        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
 
 
 class CampaignSchema(Schema):
@@ -277,3 +287,18 @@ class DomainSchema(Schema):
     ip = fields.Str()
     cert_path = fields.Str()
     key_path = fields.Str()
+
+
+# Result Classes
+class Result(db.Model):
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.id'), primary_key=True)
+    tracker = db.Column(db.String(32), nullable=False)
+    status = db.Column(db.String(32))
+
+
+class ResultSchema(Schema):
+    campaign_id = fields.Number()
+    person_id = fields.Nested(PersonSchema, strict=True)
+    tracker = fields.Str()
+    status = fields.Str()

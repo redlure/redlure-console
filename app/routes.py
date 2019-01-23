@@ -1,6 +1,6 @@
 from flask import request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -768,6 +768,7 @@ def cast(workspace_id, campaign_id):
     if campaign is None:
         return 'campaign does not exist', 404
 
+    campaign.prep_tracking()
     campaign.cast()
     
-    return 'lures casted', 200
+    return 'casting lures', 200
