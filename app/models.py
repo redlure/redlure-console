@@ -13,6 +13,7 @@ role_access = db.Table('role access',
     db.Column('workspace_id', db.Integer, db.ForeignKey('workspace.id'), primary_key=True)
 )
 
+
 # Workspace Classes
 class Workspace(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -21,6 +22,7 @@ class Workspace(db.Model):
     profiles = db.relationship('Profile', backref='workspace', lazy=True, cascade='all,delete')
     emails = db.relationship('Email', backref='workspace', lazy=True, cascade='all,delete')
     campaigns = db.relationship('Campaign', backref='workspace', lazy=True, cascade='all,delete')
+
 
     def __repr__(self):
         return '<Workspace {}>'.format(self.name)
@@ -36,8 +38,9 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
     role_type = db.Column(db.String(64), nullable=False)
-    workspaces = db.relationship('Workspace', secondary=role_access, lazy=True, backref=db.backref('workspaces', lazy=True))
+    workspaces = db.relationship('Workspace', secondary=role_access, lazy=True, backref=db.backref('roles', lazy=True))
     users = db.relationship('User', backref='role', lazy=True)
+
 
     def __repr__(self):
         return '<Role {}>'.format(self.name)
@@ -57,17 +60,20 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128))
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
 
+
     def set_password(self, password):
         '''
         Hash the given string and store as the user's password
         '''
         self.password_hash = generate_password_hash(password)
 
+
     def check_password(self, password):
         '''
         Hash the given string and check it against the stored password hash 
         '''
         return check_password_hash(self.password_hash, password)
+
 
     def __repr__(self):
         return '<User {}>'.format(self.username)
@@ -113,9 +119,10 @@ class Profile(db.Model):
 
     
     def send_test_mail(self, address):
+        self.set_mail_configs()
         mail = Mail(app)
         msg = Message('redlure test', sender=self.from_address, recipients=[address])
-        msg.html = "<text>Hello Flask message sent from Flask-Mail</text>"
+        msg.html = "<text>This a test email sent from your redlure profile using Flask Mail</text>"
         mail.send(msg)
         
     
@@ -124,14 +131,14 @@ class Profile(db.Model):
             addresses = [addresses]
         
         try:
+            self.set_mail_configs()
             mail = Mail(app)
-            msg = Message(subject=subject, sender=self.from_address, recipients=addresses)
-            msg.html = html
-            mail.send(msg)
-            return 'test email sent', 200
+            for address in addresses:
+                msg = Message(subject=subject, sender=self.from_address, recipients=[address])
+                msg.html = html
+                mail.send(msg)
         except Exception as error:
             print(error)
-            return 'error', 400
 
 
 class ProfileSchema(Schema):
@@ -154,6 +161,7 @@ class Person(db.Model):
     email = db.Column(db.String(64), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
 
+
     def __repr__(self):
         return '<Person {}>'.format(self.email)
 
@@ -173,9 +181,9 @@ class List(db.Model):
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='list', lazy=True)
 
+
     def __repr__(self):
         return '<Target List {}>'.format(self.name)
-
 
 
 class ListSchema(Schema):
@@ -189,9 +197,11 @@ class ListSchema(Schema):
 class Email(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
-    html = db.Column(db.LargeBinary)
+    subject = db.Column(db.String(64), nullable=False)
+    html = db.Column(db.LargeBinary, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='email', lazy=True)
+
 
     def __repr__(self):
         return '<Email {}>'.format(self.name)
@@ -200,6 +210,7 @@ class Email(db.Model):
 class EmailSchema(Schema):
     id = fields.Number()
     name = fields.Str()
+    subject = fields.Str()
     html = fields.Str()
 
 
@@ -213,8 +224,17 @@ class Campaign(db.Model):
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
     domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
 
+
     def __repr__(self):
         return '<Campaign {}>'.format(self.name)
+
+
+    def get_list_addresses(self):
+        return [target.email for target in self.list.targets]
+
+    
+    def cast(self):
+        self.profile.send_mail(self.email.subject, self.email.html, self.get_list_addresses())
 
 
 class CampaignSchema(Schema):
@@ -236,8 +256,10 @@ class Domain(db.Model):
     key_path = db.Column(db.String(128))
     campaigns = db.relationship('Campaign', backref='domain', lazy=True)
 
+
     def __repr__(self):
         return '<Domain {}>'.format(self.domain)
+
 
     def update_ip(self):
         '''
