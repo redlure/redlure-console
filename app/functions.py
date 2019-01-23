@@ -28,7 +28,7 @@ def validate_workspace(workspace_id):
     '''
     Returns True if the given Workspace ID exists in the database
     '''
-    workspace = Workspace.query.filter_by(id=workspace_id).first()
+    workspace = Workspace.query.filter(Workspace.roles.contains(current_user.role)).filter_by(id=workspace_id).first()
     if workspace is None:
         return False
     return True
