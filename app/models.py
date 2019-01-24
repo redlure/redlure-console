@@ -8,6 +8,7 @@ from flask import jsonify
 from socket import gethostbyname
 import string
 import random
+from datetime import datetime
 
 
 role_access = db.Table('role access',
@@ -24,6 +25,8 @@ class Workspace(db.Model):
     profiles = db.relationship('Profile', backref='workspace', lazy=True, cascade='all,delete')
     emails = db.relationship('Email', backref='workspace', lazy=True, cascade='all,delete')
     campaigns = db.relationship('Campaign', backref='workspace', lazy=True, cascade='all,delete')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
     def __repr__(self):
@@ -33,6 +36,8 @@ class Workspace(db.Model):
 class WorkspaceSchema(Schema):
     id = fields.Number()
     name = fields.Str()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
 
 
 # Role Classes
@@ -105,6 +110,8 @@ class Profile(db.Model):
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='profile', lazy=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
     def __repr__(self):
@@ -155,6 +162,8 @@ class ProfileSchema(Schema):
     password = fields.Str()
     tls = fields.Boolean()
     ssl = fields.Boolean()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
 
 
 # Person Classes (Targets)
@@ -185,6 +194,8 @@ class List(db.Model):
     targets = db.relationship('Person', backref='list', lazy=True, cascade='all,delete')
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='list', lazy=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
     def __repr__(self):
@@ -196,6 +207,8 @@ class ListSchema(Schema):
     name = fields.Str()
     targets = fields.Nested(PersonSchema, many=True)
     workspace_id = fields.Number()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
 
 
 # Email Classes
@@ -206,6 +219,8 @@ class Email(db.Model):
     html = db.Column(db.LargeBinary, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='email', lazy=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
     def __repr__(self):
@@ -217,6 +232,8 @@ class EmailSchema(Schema):
     name = fields.Str()
     subject = fields.Str()
     html = fields.Str()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
 
 
 # Campaign Classes
@@ -229,6 +246,8 @@ class Campaign(db.Model):
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
     domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
     results = db.relationship('Result', backref='campaign', lazy=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
     def __repr__(self):
@@ -255,6 +274,8 @@ class CampaignSchema(Schema):
     profile_id = fields.Number()
     list_id = fields.Number()
     domain_id = fields.Number()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
 
 
 # Domain Classes
