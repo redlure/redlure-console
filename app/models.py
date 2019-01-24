@@ -236,12 +236,36 @@ class EmailSchema(Schema):
     updated_at = fields.DateTime()
 
 
+# Page Classes
+class Page(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    html = db.Column(db.LargeBinary, nullable=False)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
+    campaigns = db.relationship('Campaign', backref='page', lazy=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+    def __repr__(self):
+        return '<Page {}>'.format(self.name)
+
+
+class PageSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    html = fields.Str()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+
+
 # Campaign Classes
 class Campaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
+    page_id = db.Column(db.Integer, db.ForeignKey('page.id'), nullable=False)
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
     domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)

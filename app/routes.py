@@ -1,6 +1,6 @@
 from flask import request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -645,12 +645,81 @@ def email(workspace_id, email_id):
     # request is a PUT
     elif request.method == 'PUT':
         name = request.form.get('Name')
+        subject = request.form.get('Subject')
         html = request.form.get('HTML').encode()
 
         email.name = name
+        email.subject = subject
         email.html = html
         db.session.commit()
         return 'email updated'
+
+
+@app.route('/workspaces/<workspace_id>/pages', methods=['GET', 'POST'])
+@login_required
+@user_login_required
+def pages(workspace_id):
+    '''
+    For GET requests, return all pages for the given workspace.
+    For POST requests, add a new pages to the given workspace.
+    '''
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        all_pages = Page.query.filter_by(workspace_id=workspace_id).all()
+        schema = PageSchema(many=True, strict=True)
+        page_data = schema.dump(all_pages)
+        return jsonify(page_data)
+
+    # request is a POST
+    elif request.method == 'POST':
+        name = request.form.get('Name')
+        html = request.form.get('HTML').encode()
+        page = Page(name=name, html=html, workspace_id=workspace_id)
+        db.session.add(page)
+        db.session.commit()
+        return 'page added', 201
+
+
+@app.route('/workspaces/<workspace_id>/pages/<page_id>', methods=['GET', 'PUT', 'DELETE'])
+@login_required
+@user_login_required
+def page(workspace_id, page_id):
+    '''
+    For GET requests, return the given page.
+    For DELETE requests, delete the given page.
+    For PUT requests, update the given page.
+    '''
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    page = Page.query.filter_by(id=page_id, workspace_id=workspace_id).first()
+    if page is None:
+        return 'page does not exist', 404
+
+    #request is a GET
+    if request.method == 'GET':
+        schema = EmailSchema(strict=True)
+        page_data = schema.dump(page)
+        return jsonify(page_data)
+
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(page)
+        db.session.commit()
+        return 'deleted', 204
+    
+    # request is a PUT
+    elif request.method == 'PUT':
+        name = request.form.get('Name')
+        html = request.form.get('HTML').encode()
+
+        page.name = name
+        page.html = html
+        db.session.commit()
+        return 'page updated'
 
 
 @app.route('/workspaces/<workspace_id>/campaigns', methods=['GET', 'POST'])
@@ -676,21 +745,23 @@ def campaigns(workspace_id):
     elif request.method == 'POST':
         name = request.form.get('Name')
         email_name = request.form.get('Email_Name')
+        page_name = request.form.get('Page_Name')
         profile_name = request.form.get('Profile_Name')
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
 
         email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
+        page = Page.query.filter_by(name=page_name, workspace_id=workspace_id).first()
         profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
         targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
         domain = Domain.query.filter_by(domain=domain_name).first()
 
         # make sure all given modules exist before continuing
-        makeup = validate_campaign_makeup(email, profile, targetlist, domain)
+        makeup = validate_campaign_makeup(email, page, profile, targetlist, domain)
         if makeup:
             return makeup
         
-        campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
+        campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, page_id=page.id, profile_id=profile.id, \
             list_id=targetlist.id, domain_id=domain.id)
         db.session.add(campaign)
         db.session.commit()
@@ -740,7 +811,7 @@ def campaign(workspace_id, campaign_id):
         domain = Domain.query.filter_by(domain=domain_name).first()
 
         # make sure all given modules exist before continuing
-        makeup = validate_campaign_makeup(email, profile, targetlist, domain)
+        makeup = validate_campaign_makeup(email, page, profile, targetlist, domain)
         if makeup:
             return makeup
 
