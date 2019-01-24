@@ -11,6 +11,7 @@ marshmallow = "*"
 flask-mail = "*"
 flask-script = "*"
 flask-user = "*"
+flask-cors = "*"
 
 [dev-packages]
 pylint = "*"
