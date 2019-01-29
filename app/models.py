@@ -9,6 +9,10 @@ from socket import gethostbyname
 import string
 import random
 from datetime import datetime
+import os
+import subprocess
+import shutil
+from binascii import hexlify
 
 
 role_access = db.Table('role access',
@@ -173,7 +177,7 @@ class Person(db.Model):
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    results = db.relationship('Result', backref='person', lazy=True)
+    results = db.relationship('Result', backref='person', lazy=True, cascade='all,delete')
 
 
     def __repr__(self):
@@ -217,6 +221,7 @@ class Email(db.Model):
     name = db.Column(db.String(64), nullable=False)
     subject = db.Column(db.String(64), nullable=False)
     html = db.Column(db.LargeBinary, nullable=False)
+    track = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='email', lazy=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -232,6 +237,7 @@ class EmailSchema(Schema):
     name = fields.Str()
     subject = fields.Str()
     html = fields.Str()
+    track = fields.Boolean()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 
@@ -269,10 +275,15 @@ class Campaign(db.Model):
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
     domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
-    results = db.relationship('Result', backref='campaign', lazy=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    results = db.relationship('Result', backref='campaign', lazy=True, cascade='all,delete')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
 
+    def __init__(self, **kwargs):
+        self.proc = None
+        self.__dict__.update(kwargs)
 
     def __repr__(self):
         return '<Campaign {}>'.format(self.name)
@@ -284,10 +295,32 @@ class Campaign(db.Model):
             result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
             db.session.add(result)
         db.session.commit()
-    
+
+
+    def write_files(self):
+        # add campaigns folder if not there
+        if not os.path.isdir('campaigns'):
+            os.mkdir('campaigns')
+        
+        # create folder for self and subdirs
+        if os.path.isdir('campaigns/%d' % self.id):
+            shutil.rmtree('campaigns/%d' % self.id)
+        os.mkdir('campaigns/%d' % self.id)
+        os.mkdir('campaigns/%d/templates' % self.id)
+        os.mkdir('campaigns/%d/static' % self.id)
+
 
     def cast(self):
-        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
+        self.write_files()
+        #self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
+        self.proc = subprocess.Popen(['gunicorn', 'template:app', '-b 0.0.0.0', '--daemon'])
+        print(self.proc)
+
+
+    def kill(self):
+        print (self.proc)
+        if not self.proc is None:
+            self.proc.kill()
 
 
 class CampaignSchema(Schema):
@@ -336,9 +369,10 @@ class DomainSchema(Schema):
 
 # Result Classes
 class Result(db.Model):
-    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
-    person_id = db.Column(db.Integer, db.ForeignKey('person.id'), primary_key=True)
-    tracker = db.Column(db.String(32), nullable=False)
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'))
+    person_id = db.Column(db.Integer, db.ForeignKey('person.id'))
+    tracker = db.Column(db.String(32), nullable=False, unique=True)
     status = db.Column(db.String(32))
 
 
@@ -347,3 +381,46 @@ class ResultSchema(Schema):
     person_id = fields.Nested(PersonSchema, strict=True)
     tracker = fields.Str()
     status = fields.Str()
+
+
+# Server classes
+class Server(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(64), unique=True)
+    alias = db.Column(db.String(64), unique=True)
+    status = db.Column(db.String(64))
+    campaigns = db.relationship('Campaign', backref='server', lazy=True)
+
+    def __repr__(self):
+        return '<Server {}>'.format(self.alias)
+
+
+class ServerSchema(Schema):
+    id = fields.Number()
+    ip = fields.Str()
+    alias = fields.Str()
+    status = fields.Str()
+
+
+# API Key Class
+class APIKey(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64))
+
+
+    def __init__(self):
+        db.session.add(self)
+        self.generate_key()
+
+
+    def __repr__(self):
+        return '<APIKey {}>'.format(self.key)
+
+    
+    def generate_key(self):
+        self.key = hexlify(os.urandom(24)).decode()
+        db.session.commit()
+
+
+class APIKeySchema(Schema):
+    key = fields.Str()

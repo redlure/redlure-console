@@ -1,14 +1,15 @@
-from flask import request, render_template, flash, redirect, url_for, jsonify
+from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
 from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup
 import json
+import subprocess
+    
 
-
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['POST'])
 def login():
     '''
     For POST requests, login the current user.
@@ -31,7 +32,7 @@ def login():
             print('redirecting to home')
             next_page = url_for('home')
         return redirect(next_page)
-    return 'login page'
+    return 'user does not exist', 404
 
 
 @app.route('/logout')
@@ -52,6 +53,38 @@ def home():
     home page.
     '''
     return 'home'
+
+
+@app.route('/api')
+@login_required
+@admin_login_required
+def api():
+    key = APIKey.query.first()
+    
+    if key is None:
+        return 'no key yet', 404
+
+    schema = APIKeySchema(strict=True)
+    key_data = schema.dump(key)
+    return jsonify(key_data)
+
+
+@app.route('/api/generate')
+@login_required
+@admin_login_required
+def generate_api():
+    key = APIKey.query.first()
+    # key has not been made, create one
+    if key is None:
+        key = APIKey()
+
+    # else update existing record with a new key
+    else:
+        key.generate_key()
+    
+    schema = APIKeySchema(strict=True)
+    key_data = schema.dump(key)
+    return jsonify(key_data)
 
 
 @app.route('/users', methods=['GET', 'POST'])
@@ -195,6 +228,73 @@ def domain(domain_id):
         domain_obj.update_ip()
         db.session.commit()
         return 'domain updated'
+
+
+@app.route('/servers', methods=['GET', 'POST'])
+@login_required
+@user_login_required
+def servers():
+    '''
+    For GET requests, return all servers.
+    For POST requests, add a new servers.
+    '''
+    # request is a GET
+    if request.method == 'GET':
+        all_servers = Server.query.all()
+        schema = ServerSchema(many=True, strict=True)
+        server_data = schema.dump(all_servers)
+        return jsonify(server_data)
+
+    # request is a POST
+    elif request.method == 'POST':
+        ip = request.form.get('IP')
+        alias = request.form.get('Alias')
+
+        server_obj = Server.query.filter_by(ip=ip).first()
+        if server_obj is not None:
+            return 'server already exists', 400
+        
+        server_obj = Server(ip=ip, alias=alias)
+        db.session.add(server_obj)
+        db.session.commit()
+        return 'server added', 201
+
+
+@app.route('/servers/<server_id>', methods=['GET', 'PUT', 'DELETE'])
+@login_required
+@admin_login_required
+def server(server_id):
+    '''
+    For GET requests, return the given server (and refresh the IP in case of update).
+    For PUT requests, update the existing server.
+    FOR DELETE requests, delete the given server.
+    '''
+
+    server_obj = Server.query.filter_by(id=server_id).first()
+    if server_obj is None:
+        return 'server does not exist', 404
+
+    # request is a GET
+    if request.method == 'GET':
+        schema = ServerSchema(strict=True)
+        server_data = schema.dump(server_obj)
+        return jsonify(server_data)
+
+    # request is a DELETE
+    elif request.method == 'DELETE':
+        db.session.delete(server_obj)
+        db.session.commit()
+        return 'deleted', 204
+    
+    # request is a PUT
+    elif request.method == 'PUT':
+        ip = request.form.get('IP')
+        alias= request.form.get('Alias')
+
+        server_obj.ip = ip
+        server_obj.alias = alias
+        db.session.commit()
+        return 'server updated'
 
 
 @app.route('/workspaces/<workspace_id>/profiles', methods=['POST', 'GET'])
@@ -839,7 +939,27 @@ def cast(workspace_id, campaign_id):
     if campaign is None:
         return 'campaign does not exist', 404
 
-    campaign.prep_tracking()
+    #campaign.prep_tracking()
     campaign.cast()
     
     return 'casting lures', 200
+
+
+@app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/kill', methods=['GET'])
+@login_required
+@user_login_required
+def kill(workspace_id, campaign_id):
+    '''
+    For GET requests, kill the given campaign.
+    '''
+
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    campaign = Campaign.query.filter_by(id=campaign_id, workspace_id=workspace_id).first()
+    if campaign is None:
+        return 'campaign does not exist', 404
+
+    campaign.kill()
+    
+    return 'campaign killed', 200
