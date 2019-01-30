@@ -115,7 +115,6 @@ def users():
             user.set_password(request.form.get('Password'))
             db.session.add(user)
             db.session.commit()
-            print('User %s added to the database' % username)
             return 'success', 201
 
 
@@ -336,7 +335,6 @@ def profiles(workspace_id):
                 username=username, password=password, tls=tls_bool, ssl=ssl_bool, workspace_id=workspace_id)
             db.session.add(profile)
             db.session.commit()
-            print('Profile %s added to the database' % name)
             return 'success', 201
 
 
@@ -849,20 +847,22 @@ def campaigns(workspace_id):
         profile_name = request.form.get('Profile_Name')
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
+        server_alias = request.form.get('Server_Alias')
 
         email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
         page = Page.query.filter_by(name=page_name, workspace_id=workspace_id).first()
         profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
         targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
         domain = Domain.query.filter_by(domain=domain_name).first()
+        server = Server.query.filter_by(alias=server_alias).first()
 
         # make sure all given modules exist before continuing
-        makeup = validate_campaign_makeup(email, page, profile, targetlist, domain)
+        makeup = validate_campaign_makeup(email, page, profile, targetlist, domain, server)
         if makeup:
             return makeup
         
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, page_id=page.id, profile_id=profile.id, \
-            list_id=targetlist.id, domain_id=domain.id)
+            list_id=targetlist.id, domain_id=domain.id, server_id=server.id)
         db.session.add(campaign)
         db.session.commit()
         return 'campaign created', 201
@@ -904,14 +904,16 @@ def campaign(workspace_id, campaign_id):
         profile_name = request.form.get('Profile_Name')
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
+        server_alias = request.form.get('Server_Alias')
 
         email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
         profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
         targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
         domain = Domain.query.filter_by(domain=domain_name).first()
+        server = Server.query.filter_by(alias=server_alias).first()
 
         # make sure all given modules exist before continuing
-        makeup = validate_campaign_makeup(email, page, profile, targetlist, domain)
+        makeup = validate_campaign_makeup(email, page, profile, targetlist, domain, server)
         if makeup:
             return makeup
 
@@ -920,6 +922,7 @@ def campaign(workspace_id, campaign_id):
         campaign.profile_id = profile.id
         campaign.list_id = targetlist.id
         campaign.domain_id = domain.id
+        campaign.server_id = server.id
         db.session.commit()
         return 'campaign updated'
 

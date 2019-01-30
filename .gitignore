@@ -123,8 +123,7 @@ campaigns/
 redlure-cert.pem
 redlure-key.pem
 
-# random
-start.sh
-gencert
-
+# templates
 template*
+
+migrations/

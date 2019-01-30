@@ -7,7 +7,7 @@ from flask_mail import Mail, Message
 from app import app
 
 
-def validate_campaign_makeup(email, page, profile, targetlist, domain):
+def validate_campaign_makeup(email, page, profile, targetlist, domain, server):
     '''
     Return a message and HTTP error code if a given campaign module does not exist.
     '''
@@ -25,6 +25,9 @@ def validate_campaign_makeup(email, page, profile, targetlist, domain):
 
     if domain is None:
         return 'domain invalid', 404
+
+    if server is None:
+        return 'server invalid', 404
 
 
 def validate_workspace(workspace_id):

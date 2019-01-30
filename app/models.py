@@ -331,6 +331,7 @@ class CampaignSchema(Schema):
     profile_id = fields.Number()
     list_id = fields.Number()
     domain_id = fields.Number()
+    server_id = fields.Number()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 
