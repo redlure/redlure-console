@@ -248,12 +248,13 @@ def servers():
     elif request.method == 'POST':
         ip = request.form.get('IP')
         alias = request.form.get('Alias')
+        port = request.form.get('Port')
 
         server_obj = Server.query.filter_by(ip=ip).first()
         if server_obj is not None:
             return 'server already exists', 400
         
-        server_obj = Server(ip=ip, alias=alias)
+        server_obj = Server(ip=ip, alias=alias, port=port)
         db.session.add(server_obj)
         db.session.commit()
         return 'server added', 201
@@ -289,9 +290,11 @@ def server(server_id):
     elif request.method == 'PUT':
         ip = request.form.get('IP')
         alias= request.form.get('Alias')
+        port = request.form.get('Port')
 
         server_obj.ip = ip
         server_obj.alias = alias
+        server_obj.port = port
         db.session.commit()
         return 'server updated'
 
@@ -819,7 +822,7 @@ def page(workspace_id, page_id):
         db.session.commit()
         return 'page updated'
 
-
+# TODO - append pages
 @app.route('/workspaces/<workspace_id>/campaigns', methods=['GET', 'POST'])
 @login_required
 @user_login_required
@@ -861,8 +864,9 @@ def campaigns(workspace_id):
         if makeup:
             return makeup
         
-        campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, page_id=page.id, profile_id=profile.id, \
+        campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
             list_id=targetlist.id, domain_id=domain.id, server_id=server.id)
+        campaign.pages.append(page)
         db.session.add(campaign)
         db.session.commit()
         return 'campaign created', 201
@@ -942,8 +946,16 @@ def cast(workspace_id, campaign_id):
     if campaign is None:
         return 'campaign does not exist', 404
 
+    # TODO - remove line if not testing
+    campaign.status = 'Inactive'
+    if campaign.status != 'Inactive':
+        return 'campaign already run', 400
+
+    schema = CampaignSchema(strict=True)
+    campaign_data = schema.dump(campaign)
+
     #campaign.prep_tracking()
-    campaign.cast()
+    campaign.cast(campaign_data)
     
     return 'casting lures', 200
 
@@ -962,6 +974,9 @@ def kill(workspace_id, campaign_id):
     campaign = Campaign.query.filter_by(id=campaign_id, workspace_id=workspace_id).first()
     if campaign is None:
         return 'campaign does not exist', 404
+
+    if campaign.status != 'Active':
+        return 'campaign is not active', 400
 
     campaign.kill()
     

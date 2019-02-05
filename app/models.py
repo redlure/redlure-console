@@ -13,11 +13,17 @@ import os
 import subprocess
 import shutil
 from binascii import hexlify
+import requests
 
 
 role_access = db.Table('role access',
     db.Column('role_id', db.Integer, db.ForeignKey('role.id'), primary_key=True),
     db.Column('workspace_id', db.Integer, db.ForeignKey('workspace.id'), primary_key=True)
+)
+
+campaign_pages = db.Table('campaign_pages',
+    db.Column('campaign_id', db.Integer, db.ForeignKey('campaign.id'), primary_key=True),
+    db.Column('page_id', db.Integer, db.ForeignKey('page.id'), primary_key=True)
 )
 
 
@@ -209,7 +215,7 @@ class List(db.Model):
 class ListSchema(Schema):
     id = fields.Number()
     name = fields.Str()
-    targets = fields.Nested(PersonSchema, many=True)
+    targets = fields.Nested(PersonSchema, many=True, strict=True)
     workspace_id = fields.Number()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
@@ -248,7 +254,6 @@ class Page(db.Model):
     name = db.Column(db.String(64), nullable=False)
     html = db.Column(db.LargeBinary, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    campaigns = db.relationship('Campaign', backref='page', lazy=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -261,77 +266,6 @@ class PageSchema(Schema):
     id = fields.Number()
     name = fields.Str()
     html = fields.Str()
-    created_at = fields.DateTime()
-    updated_at = fields.DateTime()
-
-
-# Campaign Classes
-class Campaign(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), nullable=False)
-    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
-    page_id = db.Column(db.Integer, db.ForeignKey('page.id'), nullable=False)
-    profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
-    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
-    results = db.relationship('Result', backref='campaign', lazy=True, cascade='all,delete')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-
-    def __init__(self, **kwargs):
-        self.proc = None
-        self.__dict__.update(kwargs)
-
-    def __repr__(self):
-        return '<Campaign {}>'.format(self.name)
-
-    
-    def prep_tracking(self):
-        for target in self.list.targets:
-            tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
-            result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
-            db.session.add(result)
-        db.session.commit()
-
-
-    def write_files(self):
-        # add campaigns folder if not there
-        if not os.path.isdir('campaigns'):
-            os.mkdir('campaigns')
-        
-        # create folder for self and subdirs
-        if os.path.isdir('campaigns/%d' % self.id):
-            shutil.rmtree('campaigns/%d' % self.id)
-        os.mkdir('campaigns/%d' % self.id)
-        os.mkdir('campaigns/%d/templates' % self.id)
-        os.mkdir('campaigns/%d/static' % self.id)
-
-
-    def cast(self):
-        self.write_files()
-        #self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
-        self.proc = subprocess.Popen(['gunicorn', 'template:app', '-b 0.0.0.0', '--daemon'])
-        print(self.proc)
-
-
-    def kill(self):
-        print (self.proc)
-        if not self.proc is None:
-            self.proc.kill()
-
-
-class CampaignSchema(Schema):
-    id = fields.Number()
-    name = fields.Str()
-    workspace_id = fields.Number()
-    email_id = fields.Number()
-    profile_id = fields.Number()
-    list_id = fields.Number()
-    domain_id = fields.Number()
-    server_id = fields.Number()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 
@@ -388,9 +322,16 @@ class ResultSchema(Schema):
 class Server(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ip = db.Column(db.String(64), unique=True)
+    port = db.Column(db.Integer, nullable=False)
     alias = db.Column(db.String(64), unique=True)
     status = db.Column(db.String(64))
     campaigns = db.relationship('Campaign', backref='server', lazy=True)
+
+
+    def __init__(self, **kwargs):
+        self.status = 'Open'
+        self.__dict__.update(kwargs)
+
 
     def __repr__(self):
         return '<Server {}>'.format(self.alias)
@@ -400,6 +341,7 @@ class ServerSchema(Schema):
     id = fields.Number()
     ip = fields.Str()
     alias = fields.Str()
+    port = fields.Number()
     status = fields.Str()
 
 
@@ -425,3 +367,82 @@ class APIKey(db.Model):
 
 class APIKeySchema(Schema):
     key = fields.Str()
+
+
+# Campaign Classes
+class Campaign(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
+    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
+    pages = db.relationship('Page', secondary=campaign_pages, lazy=True, backref=db.backref('campaigns', lazy=True))
+    profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
+    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
+    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    results = db.relationship('Result', backref='campaign', lazy=True, cascade='all,delete')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    status = db.Column(db.String(32), nullable=False)
+    
+
+    def __init__(self, **kwargs):
+        self.status = 'Inactive'
+        self.__dict__.update(kwargs)
+
+    def __repr__(self):
+        return '<Campaign {}>'.format(self.name)
+
+    
+    def prep_tracking(self):
+        for target in self.list.targets:
+            tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
+            result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
+            db.session.add(result)
+        db.session.commit()
+
+
+    def cast(self, data):
+        #self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
+        params = {'key': APIKey.query.first().key}
+        r = requests.post('https://%s:%d/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
+        print(r.content)
+        self.status = 'Active'
+        db.session.commit()
+
+
+    def kill(self):
+        payload = {'id': self.id}
+        params = {'key': APIKey.query.first().key}
+        r = requests.post('https://%s:%d/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
+        print(r.content)
+        self.status = 'Complete'
+        db.session.commit()
+
+'''
+class CampaignSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    workspace_id = fields.Number()
+    email_id = fields.Number()
+    page_id = fields.Number()
+    profile_id = fields.Number()
+    list_id = fields.Number()
+    domain_id = fields.Number()
+    server_id = fields.Number()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+'''
+class CampaignSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    workspace_id = fields.Number()
+    email = fields.Nested(EmailSchema, strict=True)
+    pages = fields.Nested(PageSchema, strict=True, many=True)
+    profile = fields.Nested(ProfileSchema, strict=True)
+    targetlist = fields.Nested(ListSchema, strict=True)
+    domain = fields.Nested(DomainSchema, strict=True)
+    server = fields.Nested(ServerSchema, strict=True)
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+    status = fields.Str()
