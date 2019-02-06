@@ -4,7 +4,7 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key
 import json
 import subprocess
     
@@ -255,8 +255,6 @@ def servers():
             return 'server already exists', 400
         
         server_obj = Server(ip=ip, alias=alias, port=port)
-        db.session.add(server_obj)
-        db.session.commit()
         return 'server added', 201
 
 
@@ -297,6 +295,22 @@ def server(server_id):
         server_obj.port = port
         db.session.commit()
         return 'server updated'
+
+
+@app.route('/servers/<server_id>/status')
+@login_required
+@user_login_required
+def server_status(server_id):
+    '''
+    For GET requests, return check if the given redlure-worker server is online and responsive.
+    '''
+
+    server_obj = Server.query.filter_by(id=server_id).first()
+    if server_obj is None:
+        return 'server does not exist', 404
+
+    status = server_obj.check_status()
+    return status
 
 
 @app.route('/workspaces/<workspace_id>/profiles', methods=['POST', 'GET'])
@@ -822,7 +836,7 @@ def page(workspace_id, page_id):
         db.session.commit()
         return 'page updated'
 
-# TODO - append pages
+
 @app.route('/workspaces/<workspace_id>/campaigns', methods=['GET', 'POST'])
 @login_required
 @user_login_required
@@ -946,15 +960,16 @@ def cast(workspace_id, campaign_id):
     if campaign is None:
         return 'campaign does not exist', 404
 
-    # TODO - remove line if not testing
-    campaign.status = 'Inactive'
     if campaign.status != 'Inactive':
         return 'campaign already run', 400
+
+    if campaign.server.check_status() != 'Online':
+        return 'chosen redlure-worker is offline', 400
 
     schema = CampaignSchema(strict=True)
     campaign_data = schema.dump(campaign)
 
-    #campaign.prep_tracking()
+    campaign.prep_tracking()
     campaign.cast(campaign_data)
     
     return 'casting lures', 200
@@ -978,6 +993,58 @@ def kill(workspace_id, campaign_id):
     if campaign.status != 'Active':
         return 'campaign is not active', 400
 
+    if campaign.server.check_status() != 'Online':
+        campaign.status = 'Complete'
+        db.session.commit()
+        return 'chosen redlure-worker is offline - campaign changed to completed', 400
+
     campaign.kill()
     
     return 'campaign killed', 200
+
+
+@app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/results')
+@login_required
+@user_login_required
+def campaign_results(workspace_id, campaign_id):
+    '''
+    For GET requests, return results for the given campaign.
+    '''
+
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    campaign = Campaign.query.filter_by(id=campaign_id, workspace_id=workspace_id).first()
+    if campaign is None:
+        return 'campaign does not exist', 404
+
+    if campaign.status == 'Inactive':
+        return 'campaign not yet started', 400
+
+    schema = ResultSchema(many=True, strict=True)
+    results = schema.dump(campaign.results)
+    return jsonify(results)
+
+
+# API routes below accept data from redlure-worker servers
+
+
+@app.route('/results/update', methods=['POST'])
+@require_api_key
+def record_open():
+    '''
+    Requires matching API key. For POST requests, check the database for a result with
+    a matching identifier and update the result's status.
+    '''
+    tracker = request.form.get('tracker')
+    action = request.form.get('action')
+
+    result = Result.query.filter_by(tracker=tracker).first()
+
+    # tracker string is not in db
+    if result is None:
+        return 'no tracker', 404
+
+    result.status = action
+    db.session.commit()
+    return 'updated'

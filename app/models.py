@@ -155,8 +155,7 @@ class Profile(db.Model):
                 mail.send(msg)
                 
                 result = Result.query.filter_by(campaign_id=campaign_id, person_id=target.id).first()
-                result.status = 'Email Sent'
-                print(result)
+                result.status = 'Sent'
                 db.session.commit()
         except Exception as error:
             print(error)
@@ -310,10 +309,15 @@ class Result(db.Model):
     tracker = db.Column(db.String(32), nullable=False, unique=True)
     status = db.Column(db.String(32))
 
+    def __init__(self, **kwargs):
+        self.status = 'Scheduled'
+        self.__dict__.update(kwargs)
+
 
 class ResultSchema(Schema):
+    id = fields.Number()
     campaign_id = fields.Number()
-    person_id = fields.Nested(PersonSchema, strict=True)
+    person = fields.Nested(PersonSchema, strict=True)
     tracker = fields.Str()
     status = fields.Str()
 
@@ -329,8 +333,25 @@ class Server(db.Model):
 
 
     def __init__(self, **kwargs):
-        self.status = 'Open'
+        db.session.add(self)
         self.__dict__.update(kwargs)
+        db.session.commit()
+        self.check_status()
+        
+
+    def check_status(self):
+        print(self.port, type(self.port))
+        params = {'key': APIKey.query.first().key}
+        try:
+            r = requests.get('https://%s:%d/status' % (self.ip, self.port), params=params, verify=False, timeout=5)
+            if r.status_code == 200:
+                self.status = 'Online'
+            else:
+                self.status = 'Offline'
+        except requests.exceptions.Timeout:
+            self.status = 'Offline'
+        db.session.commit()
+        return self.status
 
 
     def __repr__(self):
@@ -403,7 +424,7 @@ class Campaign(db.Model):
 
 
     def cast(self, data):
-        #self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
+        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
         print(r.content)

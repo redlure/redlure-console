@@ -60,6 +60,8 @@ def init_db():
     db.session.add(admin)
     db.session.commit()
 
+    key = APIKey()
+
 
 def gen_certs():
     proc = subprocess.Popen(shlex.split('openssl req -x509 -newkey rsa:4096 -nodes -subj "/" -out redlure-cert.pem -keyout redlure-key.pem -days 365'))

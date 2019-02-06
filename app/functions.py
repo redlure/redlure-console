@@ -2,9 +2,24 @@
 from functools import wraps
 from flask_login import current_user
 import re
-from app.models import Workspace, Email, Profile, List, Domain
+from app.models import Workspace, Email, Profile, List, Domain, APIKey
 from flask_mail import Mail, Message
 from app import app
+from flask import request, abort
+
+
+def require_api_key(f):
+    '''
+    Require an API key be provided to a function
+    '''
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        api_key = APIKey.query.first().key
+        if request.args.get('key') and request.args.get('key') == api_key:
+            return f(*args, **kwargs)
+        else:
+            abort(401)
+    return wrap 
 
 
 def validate_campaign_makeup(email, page, profile, targetlist, domain, server):
