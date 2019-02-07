@@ -229,6 +229,27 @@ def domain(domain_id):
         return 'domain updated'
 
 
+@app.route('/domains/<domain_id>/certificates/generate')
+@login_required
+@user_login_required
+def generate_cert(domain_id):
+    '''
+    For GET requests, generate certificates on the server the domain is pointed at.
+    '''
+
+    domain_obj = Domain.query.filter_by(id=domain_id).first()
+    if domain_obj is None:
+        return 'domain does not exist', 404
+
+    server = Server.query.filter_by(ip=domain_obj.ip).first()
+    if server is None:
+        return 'domain is not pointed to a redlure-worker server', 400
+    
+    domain_obj.generate_cert(server)
+    return 'certs generated'
+
+
+
 @app.route('/servers', methods=['GET', 'POST'])
 @login_required
 @user_login_required
@@ -865,7 +886,13 @@ def campaigns(workspace_id):
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
         server_alias = request.form.get('Server_Alias')
+        port = request.form.get('Port')
+        ssl = request.form.get('SSL')
 
+        ssl_bool = convert_to_bool(ssl)
+        if type(ssl_bool) != bool:
+            return 'ssl must be either true or false', 400
+        
         email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
         page = Page.query.filter_by(name=page_name, workspace_id=workspace_id).first()
         profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
@@ -879,7 +906,7 @@ def campaigns(workspace_id):
             return makeup
         
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
-            list_id=targetlist.id, domain_id=domain.id, server_id=server.id)
+            list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool)
         campaign.pages.append(page)
         db.session.add(campaign)
         db.session.commit()
@@ -923,6 +950,12 @@ def campaign(workspace_id, campaign_id):
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
         server_alias = request.form.get('Server_Alias')
+        port = request.form.get('Port')
+        ssl = request.form.get('SSL')
+
+        ssl_bool = convert_to_bool(ssl)
+        if type(ssl_bool) != bool:
+            return 'ssl must be either true or false', 400
 
         email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
         profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
@@ -941,6 +974,8 @@ def campaign(workspace_id, campaign_id):
         campaign.list_id = targetlist.id
         campaign.domain_id = domain.id
         campaign.server_id = server.id
+        campaign.port = port
+        campaign.ssl = ssl_bool
         db.session.commit()
         return 'campaign updated'
 
@@ -964,7 +999,7 @@ def cast(workspace_id, campaign_id):
         return 'campaign already run', 400
 
     if campaign.server.check_status() != 'Online':
-        return 'chosen redlure-worker is offline', 400
+        return 'could not start campaign: %s' % campaign.server.status, 400
 
     schema = CampaignSchema(strict=True)
     campaign_data = schema.dump(campaign)
@@ -996,7 +1031,7 @@ def kill(workspace_id, campaign_id):
     if campaign.server.check_status() != 'Online':
         campaign.status = 'Complete'
         db.session.commit()
-        return 'chosen redlure-worker is offline - campaign changed to completed', 400
+        return 'could not stop campaign: %s. - campaign changed to completed' % campaign.server.status, 400
 
     campaign.kill()
     

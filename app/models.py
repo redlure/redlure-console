@@ -145,7 +145,7 @@ class Profile(db.Model):
         mail.send(msg)
         
     
-    def send_mail(self, subject, html, targets, campaign_id):
+    def send_mail(self, subject, html, targets, campaign_id, domain):
         try:
             self.set_mail_configs()
             mail = Mail(app)
@@ -293,6 +293,15 @@ class Domain(db.Model):
             self.ip = 'Domain not found'
 
 
+    def generate_cert(self, server):
+        payload = {'domain': self.domain}
+        params = {'key': APIKey.query.first().key}
+        try:
+            r = requests.post('https://%s:%d/certificates/generate' % (server.ip, server.port), params=params, data=payload, verify=False)
+        except:
+            pass
+
+
 class DomainSchema(Schema):
     id = fields.Number()
     domain = fields.Str()
@@ -340,15 +349,16 @@ class Server(db.Model):
         
 
     def check_status(self):
-        print(self.port, type(self.port))
         params = {'key': APIKey.query.first().key}
         try:
             r = requests.get('https://%s:%d/status' % (self.ip, self.port), params=params, verify=False, timeout=5)
             if r.status_code == 200:
                 self.status = 'Online'
+            elif r.status_code == 401:
+                self.status = 'Mismatching API Key'
             else:
                 self.status = 'Offline'
-        except requests.exceptions.Timeout:
+        except:
             self.status = 'Offline'
         db.session.commit()
         return self.status
@@ -401,6 +411,8 @@ class Campaign(db.Model):
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
     domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
     server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    port = db.Column(db.Integer, nullable=False)
+    ssl = db.Column(db.Boolean, nullable=False)
     results = db.relationship('Result', backref='campaign', lazy=True, cascade='all,delete')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -424,18 +436,21 @@ class Campaign(db.Model):
 
 
     def cast(self, data):
-        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id)
+        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id, self.domain.domain)
         params = {'key': APIKey.query.first().key}
-        r = requests.post('https://%s:%d/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
+        r = requests.post('https://%s:%d/campaigns/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
+        if r.status_code == 400:
+            # TODO - handle case where port is already in use
+            pass
         print(r.content)
         self.status = 'Active'
         db.session.commit()
 
 
     def kill(self):
-        payload = {'id': self.id}
+        payload = {'id': self.id, 'port': self.port}
         params = {'key': APIKey.query.first().key}
-        r = requests.post('https://%s:%d/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
+        r = requests.post('https://%s:%d/campaigns/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
         print(r.content)
         self.status = 'Complete'
         db.session.commit()
@@ -464,6 +479,8 @@ class CampaignSchema(Schema):
     targetlist = fields.Nested(ListSchema, strict=True)
     domain = fields.Nested(DomainSchema, strict=True)
     server = fields.Nested(ServerSchema, strict=True)
+    port = fields.Number()
+    ssl = fields.Boolean()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
     status = fields.Str()
