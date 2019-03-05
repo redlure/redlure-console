@@ -12,6 +12,7 @@ flask-mail = "*"
 flask-script = "*"
 flask-user = "*"
 requests = "*"
+"bs4" = "*"
 
 [dev-packages]
 pylint = "*"

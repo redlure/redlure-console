@@ -4,7 +4,7 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link
 import json
 import subprocess
     
@@ -791,6 +791,19 @@ def email(workspace_id, email_id):
         return 'email updated'
 
 
+@app.route('/clone', methods=['POST'])
+@login_required
+@user_login_required
+def clone():
+    '''
+    For POST requests, return the source HTML of a given URL
+    '''
+    link = request.form.get('Link')
+    return clone_link(link)
+
+    
+
+
 @app.route('/workspaces/<workspace_id>/pages', methods=['GET', 'POST'])
 @login_required
 @user_login_required
@@ -813,7 +826,9 @@ def pages(workspace_id):
     elif request.method == 'POST':
         name = request.form.get('Name')
         html = request.form.get('HTML').encode()
-        page = Page(name=name, html=html, workspace_id=workspace_id)
+        url = request.form.get('URL')
+        method = request.form.get('Method')
+        page = Page(name=name, html=html, workspace_id=workspace_id, url=url, method=method)
         db.session.add(page)
         db.session.commit()
         return 'page added', 201
@@ -837,7 +852,8 @@ def page(workspace_id, page_id):
 
     #request is a GET
     if request.method == 'GET':
-        schema = EmailSchema(strict=True)
+        page.find_form_fields()
+        schema = PageSchema(strict=True)
         page_data = schema.dump(page)
         return jsonify(page_data)
 
@@ -851,9 +867,13 @@ def page(workspace_id, page_id):
     elif request.method == 'PUT':
         name = request.form.get('Name')
         html = request.form.get('HTML').encode()
+        url = request.form.get('URL')
+        method = request.form.get('Method')
 
         page.name = name
         page.html = html
+        page.url = url
+        page.method = method
         db.session.commit()
         return 'page updated'
 
@@ -1066,7 +1086,7 @@ def campaign_results(workspace_id, campaign_id):
 
 @app.route('/results/update', methods=['POST'])
 @require_api_key
-def record_open():
+def record_action():
     '''
     Requires matching API key. For POST requests, check the database for a result with
     a matching identifier and update the result's status.

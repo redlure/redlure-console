@@ -1,4 +1,4 @@
-from app import db, login
+from app import app, db, login
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from marshmallow import Schema, fields
@@ -14,6 +14,7 @@ import subprocess
 import shutil
 from binascii import hexlify
 import requests
+from bs4 import BeautifulSoup
 
 
 role_access = db.Table('role access',
@@ -252,6 +253,8 @@ class Page(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
     html = db.Column(db.LargeBinary, nullable=False)
+    url = db.Column(db.String(64), nullable=False)
+    method = db.Column(db.String(32), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -261,10 +264,20 @@ class Page(db.Model):
         return '<Page {}>'.format(self.name)
 
 
+    def find_form_fields(self):
+        fields = []
+        forms = BeautifulSoup(self.html, features="lxml").find_all('form')
+        inputs = forms[0].find_all('input')
+        for input in inputs:
+            fields.append(input['name'])
+
+
 class PageSchema(Schema):
     id = fields.Number()
     name = fields.Str()
     html = fields.Str()
+    url = fields.Str()
+    method = fields.Str()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 
@@ -317,6 +330,7 @@ class Result(db.Model):
     person_id = db.Column(db.Integer, db.ForeignKey('person.id'))
     tracker = db.Column(db.String(32), nullable=False, unique=True)
     status = db.Column(db.String(32))
+
 
     def __init__(self, **kwargs):
         self.status = 'Scheduled'

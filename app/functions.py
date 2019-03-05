@@ -6,6 +6,19 @@ from app.models import Workspace, Email, Profile, List, Domain, APIKey
 from flask_mail import Mail, Message
 from app import app
 from flask import request, abort
+import requests
+from bs4 import BeautifulSoup
+
+
+def clone_link(link):
+    r = requests.get(link, verify=False)
+    if r.status_code == 200:
+        soup = BeautifulSoup(r.content, features='lxml')
+        base = soup.new_tag('base', href=link)
+        soup.find('head').insert_before(base)
+        return str(soup), 200
+    else:
+        return 'error with link', 404
 
 
 def require_api_key(f):
