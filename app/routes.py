@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -1093,13 +1093,37 @@ def record_action():
     '''
     tracker = request.form.get('tracker')
     action = request.form.get('action')
-
+    
     result = Result.query.filter_by(tracker=tracker).first()
-
+    
     # tracker string is not in db
     if result is None:
         return 'no tracker', 404
 
     result.status = action
+    db.session.commit()
+    return 'updated'
+
+
+@app.route('/results/form', methods=['POST'])
+@require_api_key
+def record_form():
+    '''
+    Requires matching API key. For POST requests, check the database for a result with
+    a matching identifier and record the submiited form values.
+    '''
+    tracker = request.form.get('tracker')
+    form_data = request.form.get('data')
+
+    result = Result.query.filter_by(tracker=tracker).first()
+    print('method hit')
+    # tracker string is not in db
+    if result is None:
+        return 'no tracker', 404
+
+    form = Form(data=form_data)
+
+    result.forms.append(form)
+    result.status = 'Submitted'
     db.session.commit()
     return 'updated'

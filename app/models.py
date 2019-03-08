@@ -15,6 +15,7 @@ import shutil
 from binascii import hexlify
 import requests
 from bs4 import BeautifulSoup
+import json
 
 
 role_access = db.Table('role access',
@@ -254,7 +255,6 @@ class Page(db.Model):
     name = db.Column(db.String(64), nullable=False)
     html = db.Column(db.LargeBinary, nullable=False)
     url = db.Column(db.String(64), nullable=False)
-    method = db.Column(db.String(32), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -323,6 +323,19 @@ class DomainSchema(Schema):
     key_path = fields.Str()
 
 
+# Form Classes (HTML form data submitted by victims)
+class Form(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    result_id = db.Column(db.Integer, db.ForeignKey('result.id'))
+    data = db.Column(db.String(128))
+
+
+class FormSchema(Schema):
+    id = fields.Number()
+    result_id = fields.Number()
+    data = fields.Str()
+
+
 # Result Classes
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -330,11 +343,17 @@ class Result(db.Model):
     person_id = db.Column(db.Integer, db.ForeignKey('person.id'))
     tracker = db.Column(db.String(32), nullable=False, unique=True)
     status = db.Column(db.String(32))
+    forms = db.relationship('Form', backref='result', lazy=True, cascade='all,delete')
 
 
     def __init__(self, **kwargs):
         self.status = 'Scheduled'
         self.__dict__.update(kwargs)
+
+    
+    def get_json_forms(self):
+        for form in self.forms:
+            print(json.loads(form.data))
 
 
 class ResultSchema(Schema):
@@ -450,12 +469,15 @@ class Campaign(db.Model):
 
 
     def cast(self, data):
-        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id, self.domain.domain)
+        # tell worker to start hosting
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
         if r.status_code == 400:
             # TODO - handle case where port is already in use
             pass
+        
+        # start sending emails
+        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id, self.domain.domain)
         print(r.content)
         self.status = 'Active'
         db.session.commit()
