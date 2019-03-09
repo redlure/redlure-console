@@ -277,7 +277,6 @@ class PageSchema(Schema):
     name = fields.Str()
     html = fields.Str()
     url = fields.Str()
-    method = fields.Str()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 
@@ -397,6 +396,18 @@ class Server(db.Model):
         return self.status
 
 
+    def kill_process(self, port):
+        self.check_status()
+        if self.status == 'Online':
+            params = {'key': APIKey.query.first().key}
+            payload = {'port': port}
+            r = requests.get('https://%s:%d/processes/kill' % (self.ip, self.port), params=params, data=payload, verify=False)
+            if r.status_code == 200:
+                return 'process killed'
+            else:
+                return 'error killing process'
+
+
     def __repr__(self):
         return '<Server {}>'.format(self.alias)
 
@@ -440,6 +451,7 @@ class Campaign(db.Model):
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
     pages = db.relationship('Page', secondary=campaign_pages, lazy=True, backref=db.backref('campaigns', lazy=True))
+    redirect_url = db.Column(db.String(64), nullable=True)
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
     domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
@@ -511,6 +523,7 @@ class CampaignSchema(Schema):
     workspace_id = fields.Number()
     email = fields.Nested(EmailSchema, strict=True)
     pages = fields.Nested(PageSchema, strict=True, many=True)
+    redirect_url = fields.Str()
     profile = fields.Nested(ProfileSchema, strict=True)
     targetlist = fields.Nested(ListSchema, strict=True)
     domain = fields.Nested(DomainSchema, strict=True)
@@ -520,3 +533,14 @@ class CampaignSchema(Schema):
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
     status = fields.Str()
+
+
+class WorkerCampaignSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    pages = fields.Nested(PageSchema, strict=True, many=True)
+    redirect_url = fields.Str()
+    domain = fields.Nested(DomainSchema, strict=True)
+    server = fields.Nested(ServerSchema, strict=True)
+    port = fields.Number()
+    ssl = fields.Boolean()

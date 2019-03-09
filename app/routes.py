@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -827,8 +827,7 @@ def pages(workspace_id):
         name = request.form.get('Name')
         html = request.form.get('HTML').encode()
         url = request.form.get('URL')
-        method = request.form.get('Method')
-        page = Page(name=name, html=html, workspace_id=workspace_id, url=url, method=method)
+        page = Page(name=name, html=html, workspace_id=workspace_id, url=url)
         db.session.add(page)
         db.session.commit()
         return 'page added', 201
@@ -868,12 +867,10 @@ def page(workspace_id, page_id):
         name = request.form.get('Name')
         html = request.form.get('HTML').encode()
         url = request.form.get('URL')
-        method = request.form.get('Method')
 
         page.name = name
         page.html = html
         page.url = url
-        page.method = method
         db.session.commit()
         return 'page updated'
 
@@ -901,33 +898,40 @@ def campaigns(workspace_id):
     elif request.method == 'POST':
         name = request.form.get('Name')
         email_name = request.form.get('Email_Name')
-        page_name = request.form.get('Page_Name')
+        page_names = request.form.getlist('Page_Name[]') # page names is a list of page names # page names is a list of page names
         profile_name = request.form.get('Profile_Name')
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
         server_alias = request.form.get('Server_Alias')
         port = request.form.get('Port')
         ssl = request.form.get('SSL')
+        redirect_url = request.form.get('Redirect_URL')
 
         ssl_bool = convert_to_bool(ssl)
         if type(ssl_bool) != bool:
             return 'ssl must be either true or false', 400
-        
+
+        pages = []
+
+        for page_name in page_names:
+            page = Page.query.filter_by(name=page_name, workspace_id=workspace_id).first()
+            pages.append(page)
+
         email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
-        page = Page.query.filter_by(name=page_name, workspace_id=workspace_id).first()
         profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
         targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
         domain = Domain.query.filter_by(domain=domain_name).first()
         server = Server.query.filter_by(alias=server_alias).first()
 
         # make sure all given modules exist before continuing
-        makeup = validate_campaign_makeup(email, page, profile, targetlist, domain, server)
+        makeup = validate_campaign_makeup(email, pages, profile, targetlist, domain, server)
         if makeup:
             return makeup
         
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
-            list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool)
-        campaign.pages.append(page)
+            list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url)
+        for page in pages:
+            campaign.pages.append(page)
         db.session.add(campaign)
         db.session.commit()
         return 'campaign created', 201
@@ -972,6 +976,7 @@ def campaign(workspace_id, campaign_id):
         server_alias = request.form.get('Server_Alias')
         port = request.form.get('Port')
         ssl = request.form.get('SSL')
+        redirect_url = request.form.get('Redirect_URL')
 
         ssl_bool = convert_to_bool(ssl)
         if type(ssl_bool) != bool:
@@ -996,6 +1001,7 @@ def campaign(workspace_id, campaign_id):
         campaign.server_id = server.id
         campaign.port = port
         campaign.ssl = ssl_bool
+        campaign.redirect_url = redirect_url
         db.session.commit()
         return 'campaign updated'
 
@@ -1021,7 +1027,7 @@ def cast(workspace_id, campaign_id):
     if campaign.server.check_status() != 'Online':
         return 'could not start campaign: %s' % campaign.server.status, 400
 
-    schema = CampaignSchema(strict=True)
+    schema = WorkerCampaignSchema(strict=True)
     campaign_data = schema.dump(campaign)
 
     campaign.prep_tracking()

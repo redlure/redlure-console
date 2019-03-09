@@ -35,15 +35,16 @@ def require_api_key(f):
     return wrap 
 
 
-def validate_campaign_makeup(email, page, profile, targetlist, domain, server):
+def validate_campaign_makeup(email, pages, profile, targetlist, domain, server):
     '''
     Return a message and HTTP error code if a given campaign module does not exist.
     '''
     if email is None:
         return 'email invalid', 404
 
-    if page is None:
-        return 'page is invalid', 404
+    for page in pages:
+        if page is None:
+            return 'at least 1 page is invalid', 404
     
     if profile is None:
         return 'profile invalid', 404
