@@ -4,7 +4,7 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts
 import json
 import subprocess
     
@@ -372,6 +372,7 @@ def profiles(workspace_id):
             profile = Profile(name=name, from_address=from_address, smtp_host=host, smtp_port=port, \
                 username=username, password=password, tls=tls_bool, ssl=ssl_bool, workspace_id=workspace_id)
             db.session.add(profile)
+            update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
             db.session.commit()
             return 'success', 201
 
@@ -401,6 +402,7 @@ def profile(workspace_id, profile_id):
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(profile)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'profile deleted', 204
 
@@ -439,7 +441,7 @@ def profile(workspace_id, profile_id):
             profile.tls = tls_bool
             profile.ssl = ssl_bool
             profile.workspace_id = workspace_id
-
+            update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
             db.session.commit()
             return 'updated', 200
 
@@ -621,6 +623,7 @@ def targetlists(workspace_id):
                 person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
                 new_list.targets.append(person)
             db.session.add(new_list)
+            update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
             db.session.commit()
             return 'success', 201
 
@@ -649,6 +652,7 @@ def targetlist(workspace_id, list_id):
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(targetlist)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return '', 204
 
@@ -661,6 +665,7 @@ def targetlist(workspace_id, list_id):
             person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
             targetlist.targets.append(person)
         targetlist.name = name
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'updated', 200
 
@@ -694,6 +699,7 @@ def targets(workspace_id, list_id):
         email = request.form.get('email')
         person = Person(first_name=first_name, last_name=last_name, email=email)
         targetlist.targets.append(person)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
     return 'added person', 201
 
@@ -717,6 +723,7 @@ def target(workspace_id, list_id, target_id):
         return 'target does not exist'
 
     db.session.delete(target)
+    update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
     db.session.commit()
     return 'deleted', 204
 
@@ -746,6 +753,7 @@ def emails(workspace_id):
         subject = request.form.get('Subject')
         email = Email(name=name, html=html, subject=subject, workspace_id=workspace_id)
         db.session.add(email)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'email added', 201
 
@@ -775,6 +783,7 @@ def email(workspace_id, email_id):
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(email)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'deleted', 204
     
@@ -787,6 +796,7 @@ def email(workspace_id, email_id):
         email.name = name
         email.subject = subject
         email.html = html
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'email updated'
 
@@ -829,6 +839,7 @@ def pages(workspace_id):
         url = request.form.get('URL')
         page = Page(name=name, html=html, workspace_id=workspace_id, url=url)
         db.session.add(page)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'page added', 201
 
@@ -859,6 +870,7 @@ def page(workspace_id, page_id):
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(page)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'deleted', 204
     
@@ -871,6 +883,7 @@ def page(workspace_id, page_id):
         page.name = name
         page.html = html
         page.url = url
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'page updated'
 
@@ -889,7 +902,7 @@ def campaigns(workspace_id):
 
     # request is a GET
     if request.method == 'GET':
-        all_campaigns = Campaign.query.all()
+        all_campaigns = Campaign.query.filter_by(workspace_id=workspace_id).all()
         schema = CampaignSchema(many=True, strict=True)
         campaign_data = schema.dump(all_campaigns)
         return jsonify(campaign_data)
@@ -933,6 +946,7 @@ def campaigns(workspace_id):
         for page in pages:
             campaign.pages.append(page)
         db.session.add(campaign)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'campaign created', 201
 
@@ -963,6 +977,7 @@ def campaign(workspace_id, campaign_id):
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(campaign)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'campaign deleted', 204
 
@@ -1002,6 +1017,7 @@ def campaign(workspace_id, campaign_id):
         campaign.port = port
         campaign.ssl = ssl_bool
         campaign.redirect_url = redirect_url
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'campaign updated'
 
@@ -1079,16 +1095,56 @@ def campaign_results(workspace_id, campaign_id):
     if campaign is None:
         return 'campaign does not exist', 404
 
-    if campaign.status == 'Inactive':
-        return 'campaign not yet started', 400
-
     schema = ResultSchema(many=True, strict=True)
     results = schema.dump(campaign.results)
     return jsonify(results)
 
 
-# API routes below accept data from redlure-worker servers
+@app.route('/workspaces/<workspace_id>/results')
+@login_required
+@user_login_required
+def workspace_results(workspace_id):
+    '''
+    For GET requests, return results for all campaigns in the given workspace.
+    '''
 
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+    workspace_results = Result.query.join(Campaign).join(Workspace).filter(Workspace.id == workspace_id).all()
+
+    schema = ResultSchema(many=True, strict=True)
+    results = schema.dump(workspace_results)
+    return jsonify(results)
+
+
+# Overview/Dasboard/Home routes (pull data to be shown on the page)
+
+@app.route('/campaigns/active')
+@user_login_required
+def active_campaigns():
+    '''
+    For GET requests, pull data on active campaigns
+    '''
+    active_campaigns = Campaign.query.filter_by(status='Active').order_by(Campaign.workspace_id).all()
+    schema = CampaignSchema(many=True, strict=True)
+    campaign_data = schema.dump(active_campaigns)
+    return jsonify(campaign_data)
+
+
+@app.route('/workspaces/recent')
+@user_login_required
+def recent_workspaces():
+    '''
+    For GET requests, return recently used workspaces
+    '''
+    recent_workspaces = Workspace.query.order_by(Workspace.updated_at.desc()).limit(5).all()
+    schema = WorkspaceSchema(many=True, strict=True)
+    workspaces = schema.dump(recent_workspaces)
+    return jsonify(workspaces)
+
+
+# API routes below accept data from redlure-worker servers
 
 @app.route('/results/update', methods=['POST'])
 @require_api_key

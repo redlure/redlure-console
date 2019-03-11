@@ -1,7 +1,7 @@
 from app import app, db, login
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, post_dump
 from flask_mail import Mail, Message
 from app import app
 from flask import jsonify
@@ -112,7 +112,7 @@ def load_user(id):
 # Sending Profile Classes
 class Profile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True, nullable=False)
+    name = db.Column(db.String(64), nullable=False)
     from_address = db.Column(db.String(64), nullable=False)
     smtp_host = db.Column(db.String(64), nullable=False)
     smtp_port = db.Column(db.Integer, nullable=False)
@@ -332,7 +332,17 @@ class Form(db.Model):
 class FormSchema(Schema):
     id = fields.Number()
     result_id = fields.Number()
-    data = fields.Str()
+    data = fields.Dict()
+
+
+    @post_dump
+    def serialize_form(self, data):
+        '''
+        Convert the submitted form data from type String back to Dict
+        '''
+        data['data'] = json.loads(data['data'])
+        return data
+    
 
 
 # Result Classes
@@ -361,6 +371,7 @@ class ResultSchema(Schema):
     person = fields.Nested(PersonSchema, strict=True)
     tracker = fields.Str()
     status = fields.Str()
+    forms = fields.Nested(FormSchema, strict=True, many=True)
 
 
 # Server classes
@@ -503,20 +514,7 @@ class Campaign(db.Model):
         self.status = 'Complete'
         db.session.commit()
 
-'''
-class CampaignSchema(Schema):
-    id = fields.Number()
-    name = fields.Str()
-    workspace_id = fields.Number()
-    email_id = fields.Number()
-    page_id = fields.Number()
-    profile_id = fields.Number()
-    list_id = fields.Number()
-    domain_id = fields.Number()
-    server_id = fields.Number()
-    created_at = fields.DateTime()
-    updated_at = fields.DateTime()
-'''
+
 class CampaignSchema(Schema):
     id = fields.Number()
     name = fields.Str()

@@ -8,6 +8,14 @@ from app import app
 from flask import request, abort
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
+
+
+def update_workspace_ts(workspace):
+    '''
+    Set the updated_at attribute of the given workspace to the current datetime
+    '''
+    workspace.updated_at = datetime.utcnow()
 
 
 def clone_link(link):
