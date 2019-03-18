@@ -1,7 +1,7 @@
 from app import app, db, login
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
-from marshmallow import Schema, fields, post_dump
+from marshmallow import Schema, fields, post_dump, pre_dump
 from flask_mail import Mail, Message
 from app import app
 from flask import jsonify
@@ -36,6 +36,7 @@ class Workspace(db.Model):
     lists = db.relationship('List', backref='workspace', lazy=True, cascade='all,delete')
     profiles = db.relationship('Profile', backref='workspace', lazy=True, cascade='all,delete')
     emails = db.relationship('Email', backref='workspace', lazy=True, cascade='all,delete')
+    pages = db.relationship('Page', backref='workspace', lazy=True, cascade='all,delete')
     campaigns = db.relationship('Campaign', backref='workspace', lazy=True, cascade='all,delete')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -147,13 +148,13 @@ class Profile(db.Model):
         mail.send(msg)
         
     
-    def send_mail(self, subject, html, targets, campaign_id, domain):
+    def send_mail(self, email, targets, campaign_id, base_url):
         try:
             self.set_mail_configs()
             mail = Mail(app)
             for target in targets:
-                msg = Message(subject=subject, sender=self.from_address, recipients=[target.email])
-                msg.html = html
+                msg = Message(subject=email.subject, sender=self.from_address, recipients=[target.email])
+                msg.html = email.prep_html(base_url, target)
                 mail.send(msg)
                 
                 result = Result.query.filter_by(campaign_id=campaign_id, person_id=target.id).first()
@@ -184,7 +185,7 @@ class Person(db.Model):
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    results = db.relationship('Result', backref='person', lazy=True, cascade='all,delete')
+    result = db.relationship('Result', backref='person', lazy=True, cascade='all,delete', uselist=False)
 
 
     def __repr__(self):
@@ -237,6 +238,30 @@ class Email(db.Model):
 
     def __repr__(self):
         return '<Email {}>'.format(self.name)
+
+    
+    def prep_html(self, base_url, target):
+        '''
+        Replace variables in the email HTML with proper values and insert the tracking image URL if needed.
+        '''
+        base_url = 'http://10.1.5.64:8080/'
+        html = self.html
+        html = html.replace(b'{{ fname }}', str.encode(target.first_name))
+        html = html.replace(b'{{ lname }}', str.encode(target.last_name))
+        html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
+        html = html.replace(b'{{ url }}', str.encode('%s' % target.result.tracker))
+        html = html.replace(b'{{ id }}', str.encode(target.result.tracker))
+        
+        soup = BeautifulSoup(html, features='lxml')
+        base = soup.new_tag('base', href=base_url)
+        soup.find('head').insert_before(base)
+
+        if self.track:
+            tracker = soup.new_tag('img', alt='', src='%s/pixel.png' % (target.result.tracker))
+            soup.find('body').insert_after(tracker)
+        html = str(soup).encode()
+
+        return html
 
 
 class EmailSchema(Schema):
@@ -498,10 +523,10 @@ class Campaign(db.Model):
         if r.status_code == 400:
             # TODO - handle case where port is already in use
             pass
-        
+
         # start sending emails
-        self.profile.send_mail(self.email.subject, self.email.html, self.list.targets, self.id, self.domain.domain)
-        print(r.content)
+        base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
+        self.profile.send_mail(self.email, self.list.targets, self.id, base_url)
         self.status = 'Active'
         db.session.commit()
 
@@ -510,7 +535,6 @@ class Campaign(db.Model):
         payload = {'id': self.id, 'port': self.port}
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
-        print(r.content)
         self.status = 'Complete'
         db.session.commit()
 

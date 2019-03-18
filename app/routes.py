@@ -7,9 +7,10 @@ from flask_mail import Mail, Message
 from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts
 import json
 import subprocess
-    
+from flask_cors import cross_origin  
 
 @app.route('/login', methods=['POST'])
+@cross_origin(supports_credentials=True)
 def login():
     '''
     For POST requests, login the current user.
@@ -25,13 +26,14 @@ def login():
             print('invalid username or password')
             flash('Invalid username or password')
             return redirect(url_for('login'))
-        
+
         login_user(user)
         next_page = request.args.get('next')
         if not next_page or url_parse(next_page).netloc != '':
             print('redirecting to home')
-            next_page = url_for('home')
-        return redirect(next_page)
+            next_page = url_for('workspaces')
+        #return redirect(next_page)
+        return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
     return 'user does not exist', 404
 
 
@@ -447,6 +449,7 @@ def profile(workspace_id, profile_id):
 
 
 @app.route('/workspaces', methods=['GET', 'POST'])
+@cross_origin(supports_credentials=True)
 @login_required
 @user_login_required
 def workspaces():
@@ -455,10 +458,10 @@ def workspaces():
     For POST requests, add a new workspace.
     '''
     if request.method == 'GET':
-        all_workspaces = Workspace.query.filter(Workspace.roles.contains(current_user.role)).all()
+        all_workspaces = Workspace.query.filter(Workspace.roles.contains(current_user.role)).order_by(Workspace.updated_at.desc()).all()
         schema = WorkspaceSchema(many=True, strict=True)
         workspaces = schema.dump(all_workspaces)
-        return jsonify(workspaces)
+        return jsonify(workspaces[0])
     else:
         # request is a POST
         name = request.form.get('Name')
@@ -751,7 +754,13 @@ def emails(workspace_id):
         name = request.form.get('Name')
         html = request.form.get('HTML').encode()
         subject = request.form.get('Subject')
-        email = Email(name=name, html=html, subject=subject, workspace_id=workspace_id)
+        track = request.form.get('Track')
+
+        track_bool = convert_to_bool(track)
+        if type(track_bool) != bool:
+            return 'Track must be either true or false', 400
+
+        email = Email(name=name, html=html, subject=subject, workspace_id=workspace_id, track=track_bool)
         db.session.add(email)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
@@ -792,10 +801,16 @@ def email(workspace_id, email_id):
         name = request.form.get('Name')
         subject = request.form.get('Subject')
         html = request.form.get('HTML').encode()
+        track = request.form.get('Track')
+
+        track_bool = convert_to_bool(track)
+        if type(track_bool) != bool:
+            return 'Track must be either true or false', 400
 
         email.name = name
         email.subject = subject
         email.html = html
+        email.track = track_bool
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'email updated'
@@ -1162,7 +1177,11 @@ def record_action():
     if result is None:
         return 'no tracker', 404
 
-    result.status = action
+    if action == 'Clicked' and result.status != 'Submitted':
+        result.status = action
+    elif action == 'Opened' and result not in ['Clicked', 'Submitted']:
+        result.status = action
+
     db.session.commit()
     return 'updated'
 
@@ -1178,7 +1197,6 @@ def record_form():
     form_data = request.form.get('data')
 
     result = Result.query.filter_by(tracker=tracker).first()
-    print('method hit')
     # tracker string is not in db
     if result is None:
         return 'no tracker', 404

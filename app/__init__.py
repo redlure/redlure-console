@@ -6,10 +6,12 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 import os
 import logging
+from flask_cors import CORS
 from logging.handlers import RotatingFileHandler
 
 
 app = Flask(__name__)
+CORS(app, supports_credentials=True)
 app.config.from_object(Config)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
