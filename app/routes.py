@@ -17,27 +17,29 @@ def login():
     '''
     if current_user.is_authenticated:
         print('User is already authenticated')
-        return redirect(url_for('home'))
+        return redirect(url_for('workspaces'))
 
     username = request.form.get('Username')
     if username is not None:
         user = User.query.filter_by(username=username).first()
         if user is None or not user.check_password(request.form.get('Password')):
             print('invalid username or password')
-            flash('Invalid username or password')
-            return redirect(url_for('login'))
+            return json.dumps({'success': False}), 401, {'ContentType':'application/json'} 
 
         login_user(user)
+        '''
         next_page = request.args.get('next')
         if not next_page or url_parse(next_page).netloc != '':
             print('redirecting to home')
             next_page = url_for('workspaces')
         #return redirect(next_page)
-        return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
-    return 'user does not exist', 404
+        '''
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'} 
+    return json.dumps({'success': False}), 401, {'ContentType':'application/json'} 
 
 
 @app.route('/logout')
+@cross_origin(supports_credentials=True)
 @login_required
 def logout():
     '''
@@ -147,6 +149,7 @@ def user(user_id):
 
 
 @app.route('/domains', methods=['GET', 'POST'])
+@cross_origin(supports_credentials=True)
 @login_required
 @user_login_required
 def domains():
@@ -160,7 +163,7 @@ def domains():
         all_domains = Domain.query.all()
         schema = DomainSchema(many=True, strict=True)
         domain_data = schema.dump(all_domains)
-        return jsonify(domain_data)
+        return jsonify(domain_data[0])
 
     # request is a POST
     elif request.method == 'POST':
@@ -176,10 +179,14 @@ def domains():
         domain_obj.update_ip()
         db.session.add(domain_obj)
         db.session.commit()
-        return 'domain added', 201
+
+        schema = DomainSchema(strict=True)
+        domain_data = schema.dump(domain_obj)
+        return jsonify(domain_data[0]), 201
 
 
 @app.route('/domains/refresh', methods=['GET'])
+@cross_origin(supports_credentials=True)
 @login_required
 @user_login_required
 def refresh_domains():
@@ -191,6 +198,7 @@ def refresh_domains():
 
 
 @app.route('/domains/<domain_id>', methods=['GET', 'PUT', 'DELETE'])
+@cross_origin(supports_credentials=True)
 @login_required
 @user_login_required
 def domain(domain_id):
@@ -232,6 +240,7 @@ def domain(domain_id):
 
 
 @app.route('/domains/<domain_id>/certificates/generate')
+@cross_origin(supports_credentials=True)
 @login_required
 @user_login_required
 def generate_cert(domain_id):
@@ -253,6 +262,7 @@ def generate_cert(domain_id):
 
 
 @app.route('/servers', methods=['GET', 'POST'])
+@cross_origin(supports_credentials=True)
 @login_required
 @user_login_required
 def servers():
@@ -265,7 +275,7 @@ def servers():
         all_servers = Server.query.all()
         schema = ServerSchema(many=True, strict=True)
         server_data = schema.dump(all_servers)
-        return jsonify(server_data)
+        return jsonify(server_data[0])
 
     # request is a POST
     elif request.method == 'POST':
@@ -278,7 +288,9 @@ def servers():
             return 'server already exists', 400
         
         server_obj = Server(ip=ip, alias=alias, port=port)
-        return 'server added', 201
+        schema = ServerSchema(strict=True)
+        server_data = schema.dump(server_obj)
+        return jsonify(server_data[0]), 201
 
 
 @app.route('/servers/<server_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -333,10 +345,11 @@ def server_status(server_id):
         return 'server does not exist', 404
 
     status = server_obj.check_status()
-    return status
+    return json.dumps({'status': status}), 200, {'ContentType':'application/json'} 
 
 
 @app.route('/workspaces/<workspace_id>/profiles', methods=['POST', 'GET'])
+@cross_origin(supports_credentials=True)
 @login_required
 @user_login_required
 def profiles(workspace_id):
@@ -351,7 +364,7 @@ def profiles(workspace_id):
         all_profiles = Profile.query.filter_by(workspace_id=workspace_id).all()
         schema = ProfileSchema(many=True, strict=True)
         profiles = schema.dump(all_profiles)
-        return jsonify(profiles)
+        return jsonify(profiles[0])
     # request is a POST
     else:
         name = request.form.get('Name')
@@ -366,17 +379,21 @@ def profiles(workspace_id):
         profile = Profile.query.filter_by(name=name).first()
         ssl_bool = convert_to_bool(ssl)
         tls_bool = convert_to_bool(tls)
+
         if profile is not None:
             return 'profile already exists', 400
         elif type(ssl_bool) != bool or type(tls_bool) != bool:
             return 'ssl/tls must be either true or false', 400
-        else:
-            profile = Profile(name=name, from_address=from_address, smtp_host=host, smtp_port=port, \
-                username=username, password=password, tls=tls_bool, ssl=ssl_bool, workspace_id=workspace_id)
-            db.session.add(profile)
-            update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
-            db.session.commit()
-            return 'success', 201
+
+        profile = Profile(name=name, from_address=from_address, smtp_host=host, smtp_port=port, \
+            username=username, password=password, tls=tls_bool, ssl=ssl_bool, workspace_id=workspace_id)
+        db.session.add(profile)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
+        db.session.commit()
+
+        schema = ProfileSchema(strict=True)
+        profile_data = schema.dump(profile)
+        return jsonify(profile_data[0]), 201
 
 
 @app.route('/workspaces/<workspace_id>/profiles/<profile_id>', methods=['GET', 'POST', 'DELETE', 'PUT'])
@@ -473,9 +490,12 @@ def workspaces():
                 admin.workspaces.append(workspace)
             db.session.add(workspace)
             db.session.commit()
-            return 'success', 201
+            schema = WorkspaceSchema(strict=True)
+            workspace_data = schema.dump(workspace)
+            return jsonify(workspace_data[0]), 201
+            #return json.dumps({'success': True}), 201, {'ContentType':'application/json'}
         else:
-            return 'workspace already exists', 400
+            return json.dumps({'success': False}), 400, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>', methods=['GET', 'PUT', 'DELETE'])
