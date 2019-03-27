@@ -145,7 +145,11 @@ class Profile(db.Model):
         mail = Mail(app)
         msg = Message('redlure test', sender=self.from_address, recipients=[address])
         msg.html = "<text>This a test email sent from your redlure profile using Flask Mail</text>"
-        mail.send(msg)
+        try:
+            mail.send(msg)
+            return True
+        except:
+           return False
         
     
     def send_mail(self, email, targets, campaign_id, base_url):

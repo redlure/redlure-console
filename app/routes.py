@@ -361,7 +361,7 @@ def profiles(workspace_id):
         return 'workspace does not exist', 404
 
     if request.method == 'GET':
-        all_profiles = Profile.query.filter_by(workspace_id=workspace_id).all()
+        all_profiles = Profile.query.filter_by(workspace_id=workspace_id).order_by(Profile.updated_at.desc()).all()
         schema = ProfileSchema(many=True, strict=True)
         profiles = schema.dump(all_profiles)
         return jsonify(profiles[0])
@@ -381,7 +381,8 @@ def profiles(workspace_id):
         tls_bool = convert_to_bool(tls)
 
         if profile is not None:
-            return 'profile already exists', 400
+            return json.dumps({'success': False}), 400, {'ContentType':'application/json'}
+
         elif type(ssl_bool) != bool or type(tls_bool) != bool:
             return 'ssl/tls must be either true or false', 400
 
@@ -428,11 +429,13 @@ def profile(workspace_id, profile_id):
     # request is a POST
     elif request.method == 'POST':
         address = request.form.get('Address')
+        
         if not validate_email_format(address):
             return 'Enter a valid email address', 400
-        else:
-            profile.send_test_mail(address)
-            return 'test email sent', 200
+    
+        success = profile.send_test_mail(address)
+        return json.dumps({'success': success}), 200, {'ContentType':'application/json'} 
+            
     
     # request is a PUT
     elif request.method == 'PUT':
@@ -450,19 +453,22 @@ def profile(workspace_id, profile_id):
 
         if type(ssl_bool) != bool or type(tls_bool) != bool:
             return 'ssl/tls must be either true or false', 400
-        else:
-            profile.name = name
-            profile.from_address = from_address
-            profile.smtp_host = host
-            profile.smtp_port = port
-            profile.username = username
-            profile.password = password
-            profile.tls = tls_bool
-            profile.ssl = ssl_bool
-            profile.workspace_id = workspace_id
-            update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
-            db.session.commit()
-            return 'updated', 200
+        
+        profile.name = name
+        profile.from_address = from_address
+        profile.smtp_host = host
+        profile.smtp_port = port
+        profile.username = username
+        profile.password = password
+        profile.tls = tls_bool
+        profile.ssl = ssl_bool
+        profile.workspace_id = workspace_id
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
+        db.session.commit()
+
+        schema = ProfileSchema(strict=True)
+        profile_data = schema.dump(profile)
+        return jsonify(profile_data[0]), 200
 
 
 @app.route('/workspaces', methods=['GET', 'POST'])
@@ -493,9 +499,8 @@ def workspaces():
             schema = WorkspaceSchema(strict=True)
             workspace_data = schema.dump(workspace)
             return jsonify(workspace_data[0]), 201
-            #return json.dumps({'success': True}), 201, {'ContentType':'application/json'}
         else:
-            return json.dumps({'success': False}), 400, {'ContentType':'application/json'}
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>', methods=['GET', 'PUT', 'DELETE'])
