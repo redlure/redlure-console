@@ -103,7 +103,7 @@ def users():
         all_users = User.query.all()
         schema = UserSchema(many=True, strict=True)
         users = schema.dump(all_users)
-        return jsonify(users)
+        return jsonify(users[0])
     # request is a POST
     else:
         username = request.form.get('Username')
@@ -381,7 +381,7 @@ def profiles(workspace_id):
         tls_bool = convert_to_bool(tls)
 
         if profile is not None:
-            return json.dumps({'success': False}), 400, {'ContentType':'application/json'}
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         elif type(ssl_bool) != bool or type(tls_bool) != bool:
             return 'ssl/tls must be either true or false', 400
@@ -557,7 +557,7 @@ def roles():
         all_roles = Role.query.all()
         schema = RoleSchema(many=True, strict=True)
         roles = schema.dump(all_roles)
-        return jsonify(roles)
+        return jsonify(roles[0])
 
     # request is a POST
     elif request.method == 'POST':

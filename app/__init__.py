@@ -13,7 +13,7 @@ from logging.handlers import RotatingFileHandler
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.config.from_object(Config)
-db = SQLAlchemy(app)
+db = SQLAlchemy(app, session_options={"autoflush": False})
 migrate = Migrate(app, db)
 login = LoginManager(app)
 login.login_view = 'login'
