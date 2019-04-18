@@ -23,7 +23,6 @@ def login():
     if username is not None:
         user = User.query.filter_by(username=username).first()
         if user is None or not user.check_password(request.form.get('Password')):
-            print('invalid username or password')
             return json.dumps({'success': False}), 401, {'ContentType':'application/json'} 
 
         login_user(user)
@@ -70,7 +69,7 @@ def api():
 
     schema = APIKeySchema(strict=True)
     key_data = schema.dump(key)
-    return jsonify(key_data)
+    return jsonify(key_data[0])
 
 
 @app.route('/api/generate')
@@ -88,7 +87,7 @@ def generate_api():
     
     schema = APIKeySchema(strict=True)
     key_data = schema.dump(key)
-    return jsonify(key_data)
+    return jsonify(key_data[0])
 
 
 @app.route('/users', methods=['GET', 'POST'])
@@ -110,16 +109,19 @@ def users():
         role = request.form.get('Role')
         role = Role.query.filter_by(name=role).first()
         user = User.query.filter_by(username=username).first()
+        
         if user is not None:
-            return 'Failed to enter into DB - username taken', 400
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
         elif role is None:
             return 'failed to enter into database - role doesnt exist', 400
-        else:
-            user = User(username=username, role_id=role.id)
-            user.set_password(request.form.get('Password'))
-            db.session.add(user)
-            db.session.commit()
-            return 'success', 201
+    
+        user = User(username=username, role_id=role.id)
+        user.set_password(request.form.get('Password'))
+        db.session.add(user)
+        db.session.commit()
+        schema = UserSchema(strict=True)
+        user_data = schema.dump(user)
+        return jsonify(user_data[0]), 201
 
 
 @app.route('/users/<user_id>', methods=['GET', 'DELETE'])
@@ -143,9 +145,11 @@ def user(user_id):
     
     # request is a DELETE
     elif request.method == 'DELETE':
+        if current_user == user:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'} 
         db.session.delete(user)
         db.session.commit()
-        return 'user deleted', 204
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'} 
 
 
 @app.route('/domains', methods=['GET', 'POST'])
@@ -230,6 +234,11 @@ def domain(domain_id):
         domain = request.form.get('Domain')
         cert_path = request.form.get('Cert_Path')
         key_path = request.form.get('Key_Path')
+
+        same_domain = Domain.query.filter_by(name=name).first()
+
+        if same_domain is not None:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         domain_obj.domain = domain
         domain_obj.cert_path = cert_path
@@ -324,6 +333,11 @@ def server(server_id):
         ip = request.form.get('IP')
         alias= request.form.get('Alias')
         port = request.form.get('Port')
+
+        same_server = Server.query.filter_by(name=name).first()
+
+        if same_server is not None:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         server_obj.ip = ip
         server_obj.alias = alias
@@ -448,6 +462,11 @@ def profile(workspace_id, profile_id):
         tls = request.form.get('TLS')
         ssl = request.form.get('SSL')
 
+        same_profile = Profile.query.filter_by(name=name).first()
+
+        if same_profile is not None:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+
         ssl_bool = convert_to_bool(ssl)
         tls_bool = convert_to_bool(tls)
 
@@ -564,18 +583,21 @@ def roles():
         name = request.form.get('Name')
         role_type = request.form.get('Role_Type')
         role = Role.query.filter_by(name=name).first()
+
         if role is not None:
-            return 'role already exists with that name', 400
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
         elif role_type.lower() not in ['administrator', 'user', 'client']:
             return 'role type not admin, user, or client', 400
-        else:
-            role = Role(name=name, role_type=role_type)
-            if role.role_type.lower() in ['administrator', 'user']:
-                general_ws = Workspace.query.filter_by(id=1, name='General').first()
-                role.workspaces.append(general_ws)
-            db.session.add(role)
-            db.session.commit()       
-            return 'success', 201
+        
+        role = Role(name=name, role_type=role_type)
+        if role.role_type.lower() in ['administrator', 'user']:
+            general_ws = Workspace.query.filter_by(id=1, name='General').first()
+            role.workspaces.append(general_ws)
+        db.session.add(role)
+        db.session.commit()       
+        schema = RoleSchema(strict=True)
+        role_data = schema.dump(role)
+        return jsonify(role_data[0]), 201
 
 
 @app.route('/roles/<role_id>', methods=['GET', 'DELETE', 'PUT'])
@@ -600,23 +622,23 @@ def role(role_id):
 
     # request is a DELETE
     elif request.method == 'DELETE':
+        if current_user.role_id == role.id:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+
         db.session.delete(role)
         db.session.commit()
-        return 'role deleted', 204
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
-    # TODO - make more flexible - possibly JSON 
-    # TODO - ability to remove workspaces from roles (could treat put as overwriting previous workspace relationships)
     # request is a PUT
     elif request.method == 'PUT':
-        ws = request.form.get('Workspace_Name')
-        workspace = Workspace.query.filter_by(name=ws).first()
-        if workspace is None:
-            return 'workspace does not exist', 404
-        if role in workspace.roles:
-            return 'role already has permissions for this workspace', 400
-        role.workspaces.append(workspace)
+        workspace_ids = request.form.getlist('Workspace_ID[]')
+        workspaces = Workspace.query.filter(Workspace.id.in_(workspace_ids)).all()
+
+        role.workspaces = workspaces
         db.session.commit()
-        return 'role updated'
+        schema = RoleSchema(strict=True)
+        role_data = schema.dump(role)
+        return jsonify(role_data[0]), 201
 
 
 @app.route('/workspaces/<workspace_id>/lists', methods = ['GET', 'POST'])
@@ -689,6 +711,12 @@ def targetlist(workspace_id, list_id):
         req_json = request.get_json()
         name = req_json['name']
         targets = req_json['targets']
+
+        same_list = List.query.filter_by(name=name).first()
+
+        if same_list is not None:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+
         for target in targets:
             person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
             targetlist.targets.append(person)
@@ -769,10 +797,10 @@ def emails(workspace_id):
 
     # request is a GET
     if request.method == 'GET':
-        all_emails = Email.query.filter_by(workspace_id=workspace_id).all()
+        all_emails = Email.query.filter_by(workspace_id=workspace_id).order_by(Email.updated_at.desc()).all()
         schema = EmailSchema(many=True, strict=True)
         email_data = schema.dump(all_emails)
-        return jsonify(email_data)
+        return jsonify(email_data[0])
 
     # request is a POST
     elif request.method == 'POST':
@@ -789,7 +817,10 @@ def emails(workspace_id):
         db.session.add(email)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
-        return 'email added', 201
+        
+        schema = EmailSchema(strict=True)
+        email_data = schema.dump(email)
+        return jsonify(email_data[0]), 200
 
 
 @app.route('/workspaces/<workspace_id>/emails/<email_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -828,6 +859,11 @@ def email(workspace_id, email_id):
         html = request.form.get('HTML').encode()
         track = request.form.get('Track')
 
+        same_email = Email.query.filter_by(name=name).first()
+
+        if same_email is not None:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+
         track_bool = convert_to_bool(track)
         if type(track_bool) != bool:
             return 'Track must be either true or false', 400
@@ -838,7 +874,7 @@ def email(workspace_id, email_id):
         email.track = track_bool
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
-        return 'email updated'
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/clone', methods=['POST'])
@@ -867,21 +903,30 @@ def pages(workspace_id):
 
     # request is a GET
     if request.method == 'GET':
-        all_pages = Page.query.filter_by(workspace_id=workspace_id).all()
+        all_pages = Page.query.filter_by(workspace_id=workspace_id).order_by(Page.updated_at.desc()).all()
         schema = PageSchema(many=True, strict=True)
         page_data = schema.dump(all_pages)
-        return jsonify(page_data)
+        return jsonify(page_data[0])
 
     # request is a POST
     elif request.method == 'POST':
         name = request.form.get('Name')
         html = request.form.get('HTML').encode()
         url = request.form.get('URL')
+
+        page = Page.query.filter_by(name=name).first()
+
+        if page is not None:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+
         page = Page(name=name, html=html, workspace_id=workspace_id, url=url)
         db.session.add(page)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
-        return 'page added', 201
+        
+        schema = PageSchema(strict=True)
+        page_data = schema.dump(page)
+        return jsonify(page_data[0]), 201
 
 
 @app.route('/workspaces/<workspace_id>/pages/<page_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -920,12 +965,17 @@ def page(workspace_id, page_id):
         html = request.form.get('HTML').encode()
         url = request.form.get('URL')
 
+        same_page = Page.query.filter_by(name=name).first()
+
+        if same_page is not None and same_page.id == page_id:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+
         page.name = name
         page.html = html
         page.url = url
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
-        return 'page updated'
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>/campaigns', methods=['GET', 'POST'])
@@ -1032,6 +1082,11 @@ def campaign(workspace_id, campaign_id):
         port = request.form.get('Port')
         ssl = request.form.get('SSL')
         redirect_url = request.form.get('Redirect_URL')
+
+        same_campaign = Campaign.query.filter_by(name=name).first()
+
+        if same_campaign is not None:
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         ssl_bool = convert_to_bool(ssl)
         if type(ssl_bool) != bool:

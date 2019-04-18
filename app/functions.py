@@ -9,6 +9,7 @@ from flask import request, abort
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+import json
 
 
 def update_workspace_ts(workspace):
@@ -19,14 +20,33 @@ def update_workspace_ts(workspace):
 
 
 def clone_link(link):
-    r = requests.get(link, verify=False)
-    if r.status_code == 200:
-        soup = BeautifulSoup(r.content, features='lxml')
-        base = soup.new_tag('base', href=link)
-        soup.find('head').insert_before(base)
-        return str(soup), 200
-    else:
-        return 'error with link', 404
+    '''
+    Take a URL and return the source HTML, adding in a base url for resources
+    '''
+    regex = re.compile(
+        r'^(?:http|ftp)s?://' # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
+        r'localhost|' #localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' # ...or ip
+        r'(?::\d+)?' # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    
+    if re.match(regex, link) is None:
+        return json.dumps({'success': False, 'message': 'Enter a valid URL'}), 200, {'ContentType':'application/json'}
+
+    try:
+        r = requests.get(link, verify=False)
+
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.content, features='lxml')
+            base = soup.new_tag('base', href=link)
+            soup.find('head').insert_before(base)
+            return json.dumps({'success': True, 'html': str(soup)}), 200, {'ContentType':'application/json'}
+        else:
+            return json.dumps({'success': False, 'message': 'Error collecting site source'}), 200, {'ContentType':'application/json'}
+
+    except:
+        return json.dumps({'success': False, 'message': 'Error collecting site source'}), 200, {'ContentType':'application/json'}
 
 
 def require_api_key(f):

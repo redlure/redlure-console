@@ -59,7 +59,7 @@ class Role(db.Model):
     name = db.Column(db.String(64), unique=True, nullable=False)
     role_type = db.Column(db.String(64), nullable=False)
     workspaces = db.relationship('Workspace', secondary=role_access, lazy=True, backref=db.backref('roles', lazy=True))
-    users = db.relationship('User', backref='role', lazy=True)
+    users = db.relationship('User', backref='role', lazy=True, cascade='all,delete')
 
 
     def __repr__(self):
