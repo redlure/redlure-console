@@ -207,7 +207,7 @@ class PersonSchema(Schema):
 class List(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
-    targets = db.relationship('Person', backref='list', lazy=True, cascade='all,delete')
+    targets = db.relationship('Person', backref='list', lazy=True, cascade='all,delete, delete-orphan')
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='list', lazy=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -248,7 +248,8 @@ class Email(db.Model):
         '''
         Replace variables in the email HTML with proper values and insert the tracking image URL if needed.
         '''
-        base_url = 'http://10.1.5.64:8080/'
+        # TODO; remove placeholder IP
+        base_url = 'http://10.1.2.180:8080/'
         html = self.html
         html = html.replace(b'{{ fname }}', str.encode(target.first_name))
         html = html.replace(b'{{ lname }}', str.encode(target.last_name))
@@ -258,7 +259,8 @@ class Email(db.Model):
         
         soup = BeautifulSoup(html, features='lxml')
         base = soup.new_tag('base', href=base_url)
-        soup.find('head').insert_before(base)
+        #soup.find('head').insert_before(base)
+        soup.insert(1, base)
 
         if self.track:
             tracker = soup.new_tag('img', alt='', src='%s/pixel.png' % (target.result.tracker))
@@ -551,7 +553,7 @@ class CampaignSchema(Schema):
     pages = fields.Nested(PageSchema, strict=True, many=True)
     redirect_url = fields.Str()
     profile = fields.Nested(ProfileSchema, strict=True)
-    targetlist = fields.Nested(ListSchema, strict=True)
+    list = fields.Nested(ListSchema, strict=True)
     domain = fields.Nested(DomainSchema, strict=True)
     server = fields.Nested(ServerSchema, strict=True)
     port = fields.Number()

@@ -235,9 +235,9 @@ def domain(domain_id):
         cert_path = request.form.get('Cert_Path')
         key_path = request.form.get('Key_Path')
 
-        same_domain = Domain.query.filter_by(name=name).first()
+        same_domain = Domain.query.filter_by(domain=domain).first()
 
-        if same_domain is not None:
+        if same_domain is not None and str(same_domain.id) != domain_id:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         domain_obj.domain = domain
@@ -334,9 +334,9 @@ def server(server_id):
         alias= request.form.get('Alias')
         port = request.form.get('Port')
 
-        same_server = Server.query.filter_by(name=name).first()
+        same_server = Server.query.filter_by(alias=alias).first()
 
-        if same_server is not None:
+        if same_server is not None and str(same_server.id) != server_id:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         server_obj.ip = ip
@@ -464,7 +464,7 @@ def profile(workspace_id, profile_id):
 
         same_profile = Profile.query.filter_by(name=name).first()
 
-        if same_profile is not None:
+        if same_profile is not None and str(same_profile.id) != profile_id:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         ssl_bool = convert_to_bool(ssl)
@@ -657,25 +657,30 @@ def targetlists(workspace_id):
         workspace_lists = List.query.filter_by(workspace_id=workspace_id).all()
         schema = ListSchema(many=True, strict=True)
         list_data = schema.dump(workspace_lists)
-        return jsonify(list_data)
+        return jsonify(list_data[0])
     
     # request is a POST
     elif request.method == 'POST':
         req_json = request.get_json()
+        print(req_json)
         name = req_json['name']
         targets = req_json['targets']
+        
         list_name = List.query.filter_by(workspace_id=workspace_id, name=name).first()
         if list_name is not None:
-            return 'workspace already has a list with that name', 400
-        else:
-            new_list = List(name=name, workspace_id=workspace_id)
-            for target in targets:
-                person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
-                new_list.targets.append(person)
-            db.session.add(new_list)
-            update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
-            db.session.commit()
-            return 'success', 201
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+        
+        new_list = List(name=name, workspace_id=workspace_id)
+        for target in targets:
+            person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
+            new_list.targets.append(person)
+        db.session.add(new_list)
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
+        db.session.commit()
+        
+        schema = ListSchema(strict=True)
+        list_data = schema.dump(new_list)
+        return jsonify(list_data[0]), 201
 
 
 @app.route('/workspaces/<workspace_id>/lists/<list_id>', methods = ['GET', 'PUT', 'DELETE'])
@@ -714,16 +719,20 @@ def targetlist(workspace_id, list_id):
 
         same_list = List.query.filter_by(name=name).first()
 
-        if same_list is not None:
+        if same_list is not None and str(same_list.id) != list_id:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
+        targetlist.targets = []
         for target in targets:
             person = Person(first_name=target['first_name'], last_name=target['last_name'], email=target['email'])
             targetlist.targets.append(person)
         targetlist.name = name
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
-        return 'updated', 200
+        
+        schema = ListSchema(strict=True)
+        list_data = schema.dump(targetlist)
+        return jsonify(list_data[0]), 201
 
 
 @app.route('/workspaces/<workspace_id>/lists/<list_id>/targets', methods=['POST', 'GET'])
@@ -861,7 +870,8 @@ def email(workspace_id, email_id):
 
         same_email = Email.query.filter_by(name=name).first()
 
-        if same_email is not None:
+        if same_email is not None and str(same_email.id) != email_id:
+            print(same_email.name, same_email.id)
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         track_bool = convert_to_bool(track)
@@ -967,7 +977,7 @@ def page(workspace_id, page_id):
 
         same_page = Page.query.filter_by(name=name).first()
 
-        if same_page is not None and same_page.id == page_id:
+        if same_page is not None and str(same_page.id) != page_id:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         page.name = name
@@ -992,16 +1002,16 @@ def campaigns(workspace_id):
 
     # request is a GET
     if request.method == 'GET':
-        all_campaigns = Campaign.query.filter_by(workspace_id=workspace_id).all()
+        all_campaigns = Campaign.query.filter_by(workspace_id=workspace_id).order_by(Campaign.updated_at.desc()).all()
         schema = CampaignSchema(many=True, strict=True)
         campaign_data = schema.dump(all_campaigns)
-        return jsonify(campaign_data)
+        return jsonify(campaign_data[0])
 
     # request is a POST
     elif request.method == 'POST':
         name = request.form.get('Name')
         email_name = request.form.get('Email_Name')
-        page_names = request.form.getlist('Page_Name[]') # page names is a list of page names # page names is a list of page names
+        page_names = request.form.getlist('Page_Names[]') # page names is a list of page names # page names is a list of page names
         profile_name = request.form.get('Profile_Name')
         list_name = request.form.get('List_Name')
         domain_name = request.form.get('Domain_Name')
@@ -1017,12 +1027,12 @@ def campaigns(workspace_id):
         pages = []
 
         for page_name in page_names:
-            page = Page.query.filter_by(name=page_name, workspace_id=workspace_id).first()
+            page = Page.query.with_entities(Page).filter((Page.name == page_name) & ((Page.workspace_id == 2) | (Page.workspace_id == 1))).first()
             pages.append(page)
 
-        email = Email.query.filter_by(name=email_name, workspace_id=workspace_id).first()
-        profile = Profile.query.filter_by(name=profile_name, workspace_id=workspace_id).first()
-        targetlist = List.query.filter_by(name=list_name, workspace_id=workspace_id).first()
+        email = Email.query.with_entities(Email).filter((Email.name == email_name) & ((Email.workspace_id == 2) | (Email.workspace_id == 1))).first()
+        profile = Profile.query.with_entities(Profile).filter((Profile.name == profile_name) & ((Profile.workspace_id == 2) | (Profile.workspace_id == 1))).first()
+        targetlist = List.query.with_entities(List).filter((List.name == list_name) & ((List.workspace_id == 2) | (List.workspace_id == 1))).first()
         domain = Domain.query.filter_by(domain=domain_name).first()
         server = Server.query.filter_by(alias=server_alias).first()
 
@@ -1035,10 +1045,11 @@ def campaigns(workspace_id):
             list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url)
         for page in pages:
             campaign.pages.append(page)
+
         db.session.add(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
-        return 'campaign created', 201
+        return json.dumps({'success': True, 'id': campaign.id}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>', methods=['GET', 'DELETE', 'PUT'])
@@ -1066,6 +1077,8 @@ def campaign(workspace_id, campaign_id):
 
     # request is a DELETE
     elif request.method == 'DELETE':
+        if campaign.status == 'Active':
+            kill(workspace_id, campaign_id)
         db.session.delete(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
@@ -1085,7 +1098,7 @@ def campaign(workspace_id, campaign_id):
 
         same_campaign = Campaign.query.filter_by(name=name).first()
 
-        if same_campaign is not None:
+        if same_campaign is not None and str(same_campaign.id) != campaign_id:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         ssl_bool = convert_to_bool(ssl)
@@ -1126,17 +1139,17 @@ def cast(workspace_id, campaign_id):
     '''
 
     if not validate_workspace(workspace_id):
-        return 'workspace does not exist', 404
+        return json.dumps({'success': False, 'reasonCode': 1}), 200, {'ContentType':'application/json'}
 
     campaign = Campaign.query.filter_by(id=campaign_id, workspace_id=workspace_id).first()
     if campaign is None:
-        return 'campaign does not exist', 404
+        return json.dumps({'success': False, 'reasonCode': 2}), 200, {'ContentType':'application/json'}
 
     if campaign.status != 'Inactive':
-        return 'campaign already run', 400
+        return json.dumps({'success': False, 'reasonCode': 3}), 200, {'ContentType':'application/json'}
 
     if campaign.server.check_status() != 'Online':
-        return 'could not start campaign: %s' % campaign.server.status, 400
+        return json.dumps({'success': False, 'reasonCode': 4}), 200, {'ContentType':'application/json'}
 
     schema = WorkerCampaignSchema(strict=True)
     campaign_data = schema.dump(campaign)
@@ -1144,7 +1157,7 @@ def cast(workspace_id, campaign_id):
     campaign.prep_tracking()
     campaign.cast(campaign_data)
     
-    return 'casting lures', 200
+    return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/kill', methods=['GET'])
@@ -1192,7 +1205,7 @@ def campaign_results(workspace_id, campaign_id):
 
     schema = ResultSchema(many=True, strict=True)
     results = schema.dump(campaign.results)
-    return jsonify(results)
+    return jsonify(results[0])
 
 
 @app.route('/workspaces/<workspace_id>/results')
@@ -1211,6 +1224,37 @@ def workspace_results(workspace_id):
     schema = ResultSchema(many=True, strict=True)
     results = schema.dump(workspace_results)
     return jsonify(results)
+
+
+@app.route('/workspaces/<workspace_id>/campaigns/modules')
+@login_required
+@user_login_required
+def campaign_modules(workspace_id):
+    '''
+    For GET requests, return possible campaign modules in the given workspace.
+    '''
+
+    if not validate_workspace(workspace_id):
+        return 'workspace does not exist', 404
+
+
+    page_names = Page.query.with_entities(Page.name).filter((Page.workspace_id == workspace_id) | (Page.workspace_id == 1)).all()
+    list_names = List.query.with_entities(List.name).filter((List.workspace_id == workspace_id) | (List.workspace_id == 1)).all()
+    email_names = Email.query.with_entities(Email.name).filter((Email.workspace_id == workspace_id) | (Email.workspace_id == 1)).all()
+    profile_names = Profile.query.with_entities(Profile.name).filter((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1)).all()
+    domain_names = Domain.query.with_entities(Domain.domain).all()
+    server_names = Server.query.with_entities(Server.alias).all()
+
+    all_info = {
+        "pages": [item for sublist in page_names for item in sublist], # make list of lists a flat list
+        "lists": [item for sublist in list_names for item in sublist],
+        "emails": [item for sublist in email_names for item in sublist],
+        "profiles": [item for sublist in profile_names for item in sublist],
+        "domains": [item for sublist in domain_names for item in sublist],
+        "servers": [item for sublist in server_names for item in sublist],
+    }
+
+    return jsonify(all_info), 200
 
 
 # Overview/Dasboard/Home routes (pull data to be shown on the page)
