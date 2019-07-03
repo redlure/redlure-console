@@ -23,11 +23,12 @@ role_access = db.Table('role access',
     db.Column('workspace_id', db.Integer, db.ForeignKey('workspace.id'), primary_key=True)
 )
 
+'''
 campaign_pages = db.Table('campaign_pages',
     db.Column('campaign_id', db.Integer, db.ForeignKey('campaign.id'), primary_key=True),
     db.Column('page_id', db.Integer, db.ForeignKey('page.id'), primary_key=True)
 )
-
+'''
 
 # Workspace Classes
 class Workspace(db.Model):
@@ -486,13 +487,28 @@ class APIKeySchema(Schema):
     key = fields.Str()
 
 
+# Association Object for campaigns and pages
+class Campaignpages(db.Model):
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
+    page_id = db.Column(db.Integer, db.ForeignKey('page.id'), primary_key=True)
+    index = db.Column(db.Integer)
+    page = db.relationship('Page', backref='campaigns', cascade='delete')
+    campaign = db.relationship('Campaign', backref='pages', cascade='delete', order_by='asc(Campaignpages.index)')
+
+
+class CampaignpagesSchema(Schema):
+    index = fields.Number()
+    page = fields.Nested(PageSchema, strict=True)
+
+
 # Campaign Classes
 class Campaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
-    pages = db.relationship('Page', secondary=campaign_pages, lazy=True, backref=db.backref('campaigns', lazy=True))
+    #pages = db.relationship('Page', secondary=campaign_pages, lazy=True, backref=db.backref('campaigns', lazy=True))
+    #pages = db.relationship('Page', secondary='Campaignpages')
     redirect_url = db.Column(db.String(64), nullable=True)
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
@@ -550,7 +566,7 @@ class CampaignSchema(Schema):
     name = fields.Str()
     workspace_id = fields.Number()
     email = fields.Nested(EmailSchema, strict=True)
-    pages = fields.Nested(PageSchema, strict=True, many=True)
+    pages = fields.Nested(CampaignpagesSchema, strict=True, many=True)
     redirect_url = fields.Str()
     profile = fields.Nested(ProfileSchema, strict=True)
     list = fields.Nested(ListSchema, strict=True)
@@ -572,3 +588,4 @@ class WorkerCampaignSchema(Schema):
     server = fields.Nested(ServerSchema, strict=True)
     port = fields.Number()
     ssl = fields.Boolean()
+

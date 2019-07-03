@@ -111,7 +111,7 @@ ENV/
 logs/
 
 # database file
-redlure.db
+*.db
 
 # temporary folder
 temp/

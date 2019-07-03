@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -8,6 +8,7 @@ from app.functions import convert_to_bool, admin_login_required, user_login_requ
 import json
 import subprocess
 from flask_cors import cross_origin  
+
 
 @app.route('/login', methods=['POST'])
 @cross_origin(supports_credentials=True)
@@ -539,7 +540,7 @@ def workspace(workspace_id):
     if request.method == 'GET':
         schema = WorkspaceSchema(strict=True)
         workspace_data = schema.dump(workspace)
-        return jsonify(workspace_data)
+        return jsonify(workspace_data[0])
 
     # request is a DELETE
     elif request.method == 'DELETE':
@@ -1003,6 +1004,11 @@ def campaigns(workspace_id):
     # request is a GET
     if request.method == 'GET':
         all_campaigns = Campaign.query.filter_by(workspace_id=workspace_id).order_by(Campaign.updated_at.desc()).all()
+        
+        # sort the pages associated with the campaign by index
+        for campaign in all_campaigns:
+            campaign.pages.sort(key=lambda camp: camp.index)
+        
         schema = CampaignSchema(many=True, strict=True)
         campaign_data = schema.dump(all_campaigns)
         return jsonify(campaign_data[0])
@@ -1043,12 +1049,19 @@ def campaigns(workspace_id):
         
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
             list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url)
-        for page in pages:
-            campaign.pages.append(page)
+        
+        #for page in pages:
+            #print(campaign.id)
 
         db.session.add(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
+        
+        for idx, page in enumerate(pages):
+            page_association = Campaignpages(campaign_id=campaign.id, page_id=page.id, index=idx)
+            db.session.add(page_association)
+            db.session.commit()
+
         return json.dumps({'success': True, 'id': campaign.id}), 200, {'ContentType':'application/json'}
 
 
