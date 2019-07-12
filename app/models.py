@@ -520,6 +520,8 @@ class Campaign(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     status = db.Column(db.String(32), nullable=False)
+    #start_date = db.Column(db.DateTime)
+    #end_date = db.Column(db.DateTime)
     
 
     def __init__(self, **kwargs):
@@ -543,13 +545,13 @@ class Campaign(db.Model):
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
         if r.status_code == 400:
-            # TODO - handle case where port is already in use
-            pass
+            return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
 
         # start sending emails
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
         self.profile.send_mail(self.email, self.list.targets, self.id, base_url)
         self.status = 'Active'
+        #self.start_date = datetime.utcnow
         db.session.commit()
 
 
@@ -558,6 +560,7 @@ class Campaign(db.Model):
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
         self.status = 'Complete'
+        #self.end_date = datetime.utcnow
         db.session.commit()
 
 
@@ -577,15 +580,23 @@ class CampaignSchema(Schema):
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
     status = fields.Str()
+    #start_date = fields.DateTime()
+    #end_date = fields.DateTime()
 
 
 class WorkerCampaignSchema(Schema):
     id = fields.Number()
     name = fields.Str()
-    pages = fields.Nested(PageSchema, strict=True, many=True)
+    pages = fields.Nested(CampaignpagesSchema, strict=True, many=True)
     redirect_url = fields.Str()
     domain = fields.Nested(DomainSchema, strict=True)
     server = fields.Nested(ServerSchema, strict=True)
     port = fields.Number()
     ssl = fields.Boolean()
+
+class ResultCampaignSchema(Schema):
+    id = fields.Number()
+    name = fields.Str()
+    status = fields.Str()
+    server = fields.Nested(ServerSchema, strict=True)
 

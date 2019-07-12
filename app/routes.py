@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages, ResultCampaignSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -1166,7 +1166,7 @@ def cast(workspace_id, campaign_id):
 
     schema = WorkerCampaignSchema(strict=True)
     campaign_data = schema.dump(campaign)
-
+    
     campaign.prep_tracking()
     campaign.cast(campaign_data)
     
@@ -1233,10 +1233,15 @@ def workspace_results(workspace_id):
         return 'workspace does not exist', 404
 
     workspace_results = Result.query.join(Campaign).join(Workspace).filter(Workspace.id == workspace_id).all()
+    campaigns = Campaign.query.filter_by(workspace_id=workspace_id).all()
+
+    schema = ResultCampaignSchema(many=True, strict=True)
+    c_results = schema.dump(campaigns)
 
     schema = ResultSchema(many=True, strict=True)
     results = schema.dump(workspace_results)
-    return jsonify(results)
+   
+    return jsonify(c_results[0], results[0])
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/modules')
