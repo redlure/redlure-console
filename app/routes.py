@@ -16,9 +16,9 @@ def login():
     '''
     For POST requests, login the current user.
     '''
-    if current_user.is_authenticated:
-        print('User is already authenticated')
-        return redirect(url_for('workspaces'))
+
+    #if current_user.is_authenticated:
+     #   return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
     username = request.form.get('Username')
     if username is not None:
@@ -264,7 +264,7 @@ def generate_cert(domain_id):
 
     server = Server.query.filter_by(ip=domain_obj.ip).first()
     if server is None:
-        return 'domain is not pointed to a redlure-worker server', 400
+        return json.dumps({'success': False, 'msg': 'Failed to generate cert. The domain does not resolve to the IP of a redlure worker'}), 200, {'ContentType':'application/json'}
     
     domain_obj.generate_cert(server)
     return 'certs generated'
