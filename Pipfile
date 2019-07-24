@@ -13,6 +13,8 @@ flask-script = "*"
 flask-user = "*"
 requests = "*"
 "bs4" = "*"
+flask-login = "*"
+flask-cors = "*"
 
 [dev-packages]
 pylint = "*"

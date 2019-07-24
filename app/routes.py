@@ -708,7 +708,7 @@ def targetlist(workspace_id, list_id):
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(targetlist)
-        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
+        update_workspace_ts(Workspace.query.filter_lby(id=workspace_id).first())
         db.session.commit()
         return '', 204
 
