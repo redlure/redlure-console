@@ -144,3 +144,19 @@ def convert_to_bool(value):
         return False
     else:
         return -1
+
+
+def convert_to_datetime(dt_string):
+    '''
+    Converts a string to a datetime object
+    
+    Example 
+    Input: '2019-07-31T10:30:30-04:00' (str)
+    Output: 2019-07-31 10:30:30 (datetime)
+    '''
+    send_date, send_time = dt_string.split('T')
+    send_time = send_time.split('-')[0]
+    send_datetime = f'{send_date} {send_time}'
+    send_datetime = datetime.strptime(send_datetime, '%Y-%m-%d %H:%M:%S')
+
+    return send_datetime

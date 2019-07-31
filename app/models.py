@@ -16,6 +16,8 @@ from binascii import hexlify
 import requests
 from bs4 import BeautifulSoup
 import json
+from threading import Thread
+from apscheduler.schedulers.background import BackgroundScheduler
 
 
 role_access = db.Table('role access',
@@ -123,7 +125,7 @@ class Profile(db.Model):
     tls = db.Column(db.Boolean, default=False, nullable=False)
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    campaigns = db.relationship('Campaign', backref='profile', lazy=True)
+    campaigns = db.relationship('Campaign', backref='profile')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -151,22 +153,62 @@ class Profile(db.Model):
             return True
         except:
            return False
-        
     
-    def send_mail(self, email, targets, campaign_id, base_url):
+    def send_mail(self, email, targets, campaign_id, base_url, interval, batch_size, start_time):
+        self.set_mail_configs()
+        mail = Mail(app)
+        sched = BackgroundScheduler()
+        job_id = str(campaign_id)
+        print(campaign_id)
+
+        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, args=[targets, email, mail, base_url, job_id, batch_size])
+        return
+
+    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size):
+        for _ in range(batch_size):
+            if recipients:
+                recipient = recipients.pop()
+                msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
+                mail.send(msg)
+            else:
+                remove_job(job_id)
+        return
+    
+    def kkkksend_mail(self, email, targets, campaign_id, base_url):
+        print('boutta send an email')
         try:
             self.set_mail_configs()
             mail = Mail(app)
-            for target in targets:
-                msg = Message(subject=email.subject, sender=self.from_address, recipients=[target.email])
-                msg.html = email.prep_html(base_url, target)
-                mail.send(msg)
-                
-                result = Result.query.filter_by(campaign_id=campaign_id, person_id=target.id).first()
-                result.status = 'Sent'
-                db.session.commit()
+            middle = len(targets) // 2
+            recipient_groups = [targets[:middle], targets[middle:]]  # just splits list in half right now
+
+            for group in recipient_groups:
+                if group:
+                    t = Thread(target=self._thread_emails, args=[group, email, mail, base_url, campaign_id])
+                    t.start()
+
         except Exception as error:
             print(error)
+        
+
+
+
+    def _thread_emails(self, recipients, email, mail, base_url, campaign_id):
+        print('ok we threading now')
+        with app.app_context():
+            for recipient in recipients:
+                msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
+                msg.html = email.prep_html(base_url, recipient)
+
+                mail.send(msg)
+                print(f'message sent to {recipient.email}')
+
+                result = Result.query.filter_by(campaign_id=campaign_id, person_id=recipient.id).first()
+                result.status = 'Sent'
+                db.session.commit()
+
+
+        return
 
 
 class ProfileSchema(Schema):
@@ -190,7 +232,7 @@ class Person(db.Model):
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    result = db.relationship('Result', backref='person', lazy=True, cascade='all,delete', uselist=False)
+    result = db.relationship('Result', backref='person', lazy=False, cascade='all,delete', uselist=False)
 
 
     def __repr__(self):
@@ -492,6 +534,7 @@ class Campaignpages(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
     page_id = db.Column(db.Integer, db.ForeignKey('page.id'), primary_key=True)
     index = db.Column(db.Integer)
+
     page = db.relationship('Page', backref='campaigns', cascade='delete')
     campaign = db.relationship('Campaign', backref='pages', cascade='delete', order_by='asc(Campaignpages.index)')
 
@@ -520,8 +563,11 @@ class Campaign(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     status = db.Column(db.String(32), nullable=False)
-    #start_date = db.Column(db.DateTime)
+    start_time = db.Column(db.DateTime, nullable=True, default='')
     #end_date = db.Column(db.DateTime)
+    send_interval = db.Column(db.Integer, default=0)  # Number of minutes to wait between sending batch of emails
+    batch_size = db.Column(db.Integer)
+    payload_url = db.Column(db.String(64))
     
 
     def __init__(self, **kwargs):
@@ -549,7 +595,7 @@ class Campaign(db.Model):
 
         # start sending emails
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
-        self.profile.send_mail(self.email, self.list.targets, self.id, base_url)
+        self.profile.send_mail(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time )
         self.status = 'Active'
         #self.start_date = datetime.utcnow
         db.session.commit()
@@ -580,7 +626,8 @@ class CampaignSchema(Schema):
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
     status = fields.Str()
-    #start_date = fields.DateTime()
+    payload_url = fields.Str()
+    start_time = fields.DateTime()
     #end_date = fields.DateTime()
 
 
@@ -593,6 +640,8 @@ class WorkerCampaignSchema(Schema):
     server = fields.Nested(ServerSchema, strict=True)
     port = fields.Number()
     ssl = fields.Boolean()
+    payload_url = fields.Str()
+
 
 class ResultCampaignSchema(Schema):
     id = fields.Number()

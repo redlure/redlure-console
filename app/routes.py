@@ -4,10 +4,11 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts, convert_to_datetime
 import json
 import subprocess
 from flask_cors import cross_origin  
+from datetime import datetime
 
 
 @app.route('/login', methods=['POST'])
@@ -463,6 +464,7 @@ def profile(workspace_id, profile_id):
         tls = request.form.get('TLS')
         ssl = request.form.get('SSL')
 
+
         same_profile = Profile.query.filter_by(name=name).first()
 
         if same_profile is not None and str(same_profile.id) != profile_id:
@@ -708,7 +710,7 @@ def targetlist(workspace_id, list_id):
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(targetlist)
-        update_workspace_ts(Workspace.query.filter_lby(id=workspace_id).first())
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return '', 204
 
@@ -1025,6 +1027,19 @@ def campaigns(workspace_id):
         port = request.form.get('Port')
         ssl = request.form.get('SSL')
         redirect_url = request.form.get('Redirect_URL')
+        start_time = request.form.get('Start_Time')
+        interval = request.form.get('Interval')
+        batch_size =request.form.get('Batch_Size')
+        payload_url = request.form.get('Payload_URL')
+        
+        print(start_time)
+        if start_time:
+            start_time = convert_to_datetime(start_time)
+        else:
+            start_time = datetime.now()
+        print(type(start_time))
+        print(start_time)
+
 
         ssl_bool = convert_to_bool(ssl)
         if type(ssl_bool) != bool:
@@ -1048,20 +1063,25 @@ def campaigns(workspace_id):
             return makeup
         
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
-            list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url)
+                start_time=start_time, send_interval=interval, batch_size=batch_size, \
+                list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url, \
+                payload_url=payload_url)
         
         #for page in pages:
             #print(campaign.id)
+        print('pages ',  pages)
+        print(f'campaign: {campaign}')
 
         db.session.add(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         
         for idx, page in enumerate(pages):
+            #Todo: fix somethingn in hbere
             page_association = Campaignpages(campaign_id=campaign.id, page_id=page.id, index=idx)
             db.session.add(page_association)
             db.session.commit()
-
+        print('down here')
         return json.dumps({'success': True, 'id': campaign.id}), 200, {'ContentType':'application/json'}
 
 
