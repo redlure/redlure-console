@@ -20,6 +20,25 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 
 
+
+
+def convert_to_datetime(dt_string):
+    '''
+    Converts a string to a datetime object
+    
+    Example 
+    Input: '2019-07-31T10:30:30-04:00' (str)
+    Output: 2019-07-31 10:30:30 (datetime)
+    '''
+    send_date, send_time = dt_string.split('T')
+    send_time = send_time.split('-')[0]
+    send_datetime = f'{send_date} {send_time}'
+    send_datetime = datetime.strptime(send_datetime, '%Y-%m-%d %H:%M:%S')
+
+    return send_datetime
+
+
+
 role_access = db.Table('role access',
     db.Column('role_id', db.Integer, db.ForeignKey('role.id'), primary_key=True),
     db.Column('workspace_id', db.Integer, db.ForeignKey('workspace.id'), primary_key=True)
@@ -154,77 +173,65 @@ class Profile(db.Model):
         except:
            return False
     
-    def send_mail(self, email, targets, campaign_id, base_url, interval, batch_size, start_time):
+    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time):
+        """
+        Schedules a campaign to execute in a separate thread. The user decides when it will run, how many emails to send at a time, and how long to wait between batches.
+        @param email:
+        @param targets:
+        @param campaign_id: int - Unique identifier for the campaign to execute
+        @param base_url: 
+        @param interval: int - 
+        @param batch_size: int - Number of emails to send at once
+        @param start_time: 
+        """
+        # Configurations
         self.set_mail_configs()
         mail = Mail(app)
         sched = BackgroundScheduler()
         job_id = str(campaign_id)
-        print(f'Attempting to send {len(targets)} emails in batches of {batch_size} every {interval} minutes')
-        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, args=[list(targets), email, mail, base_url, job_id, batch_size, sched])
+        targets = list(targets)
+
+        print(f'Attempting to send {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
+        # Schedule the campaign and intialize it
+        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched])
         sched.start()
-        print('okay it should be scheduled')
         
-        print(threading.enumerate())
         return
 
     def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched):
-        print(f'Recipients: {recipients}')
-        print(type(recipients))
+        """
+        Sends emails to the targets in batches.  This function alwasy runs on a separate thread.
+        @param recipients: list - all remaining targets to send an email to for the specified campaign
+        @param email:
+        @param mail: Flask Mail Instance
+        @param base_url: 
+        @param job_id: int - Unique identifier for the scheduled job (it is identical to campaign_id)
+        @param batch_size: int - Number of emails to send at once
+        @param sched: Schedule Instance - this is necessary to kill of the job 
+        """
+
         for _ in range(batch_size):
             if recipients:
-                print('pre pop')
                 recipient = recipients.pop()
-                print(f'sending to {recipient.email}')
+                #TODO: prep html
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
+                
+                # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
                     mail.send(msg)
-                    print(f'Email sent to {recipient.email}')
+                
+                # Updates email's status in database
                 result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
                 result.status = 'Sent'
                 db.session.commit()
+            
+            # When all targets have been emailed, the job has to be cancelled
             else:
                 sched.remove_job(job_id=job_id)
-                print('Job killed succesfully')
-        print(f'{batch_size} emails sent')
+                return
+
         return
     
-    def kkkksend_mail(self, email, targets, campaign_id, base_url):
-        print('boutta send an email')
-        try:
-            self.set_mail_configs()
-            mail = Mail(app)
-            middle = len(targets) // 2
-            recipient_groups = [targets[:middle], targets[middle:]]  # just splits list in half right now
-
-            for group in recipient_groups:
-                if group:
-                    t = Thread(target=self._thread_emails, args=[group, email, mail, base_url, campaign_id])
-                    t.start()
-
-        except Exception as error:
-            print(error)
-        
-
-
-
-    def _thread_emails(self, recipients, email, mail, base_url, campaign_id):
-        print('ok we threading now')
-        with app.app_context():
-            for recipient in recipients:
-                msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                msg.html = email.prep_html(base_url, recipient)
-
-                mail.send(msg)
-                print(f'message sent to {recipient.email}')
-
-                result = Result.query.filter_by(campaign_id=campaign_id, person_id=recipient.id).first()
-                result.status = 'Sent'
-                db.session.commit()
-
-
-        return
-
-
 class ProfileSchema(Schema):
     id = fields.Number()
     name = fields.Str()
@@ -609,7 +616,7 @@ class Campaign(db.Model):
 
         # start sending emails
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
-        self.profile.send_mail(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time )
+        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time )
         self.status = 'Active'
         #self.start_date = datetime.utcnow
         db.session.commit()
@@ -662,4 +669,4 @@ class ResultCampaignSchema(Schema):
     name = fields.Str()
     status = fields.Str()
     server = fields.Nested(ServerSchema, strict=True)
-
+    start_time = fields.DateTime(format='%m-%d-%y')
