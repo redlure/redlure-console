@@ -16,8 +16,8 @@ from binascii import hexlify
 import requests
 from bs4 import BeautifulSoup
 import json
-from threading import Thread
 from apscheduler.schedulers.background import BackgroundScheduler
+import threading
 
 
 role_access = db.Table('role access',
@@ -159,19 +159,33 @@ class Profile(db.Model):
         mail = Mail(app)
         sched = BackgroundScheduler()
         job_id = str(campaign_id)
-        print(campaign_id)
-
-        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, args=[targets, email, mail, base_url, job_id, batch_size])
+        print(f'Attempting to send {len(targets)} emails in batches of {batch_size} every {interval} minutes')
+        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, args=[list(targets), email, mail, base_url, job_id, batch_size, sched])
+        sched.start()
+        print('okay it should be scheduled')
+        
+        print(threading.enumerate())
         return
 
-    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size):
+    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched):
+        print(f'Recipients: {recipients}')
+        print(type(recipients))
         for _ in range(batch_size):
             if recipients:
+                print('pre pop')
                 recipient = recipients.pop()
+                print(f'sending to {recipient.email}')
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                mail.send(msg)
+                with app.app_context():
+                    mail.send(msg)
+                    print(f'Email sent to {recipient.email}')
+                result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
+                result.status = 'Sent'
+                db.session.commit()
             else:
-                remove_job(job_id)
+                sched.remove_job(job_id=job_id)
+                print('Job killed succesfully')
+        print(f'{batch_size} emails sent')
         return
     
     def kkkksend_mail(self, email, targets, campaign_id, base_url):
@@ -588,10 +602,10 @@ class Campaign(db.Model):
 
     def cast(self, data):
         # tell worker to start hosting
-        params = {'key': APIKey.query.first().key}
-        r = requests.post('https://%s:%d/campaigns/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
-        if r.status_code == 400:
-            return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
+        #params = {'key': APIKey.query.first().key}
+        #r = requests.post('https://%s:%d/campaigns/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
+        #if r.status_code == 400:
+        #   return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
 
         # start sending emails
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
