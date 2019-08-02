@@ -172,7 +172,7 @@ class Profile(db.Model):
         job_id = str(campaign_id)
         targets = list(targets)
 
-        print(f'Attempting to send {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
+        app.logger.info(f'Campaign started. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
         # Schedule the campaign and intialize it
         sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched])
         sched.start()
@@ -200,6 +200,8 @@ class Profile(db.Model):
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
                     mail.send(msg)
+                    app.logger.info(f'Email succesflly sent to {recipient.email}')
+
                 
                 # Updates email's status in database
                 result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
@@ -209,6 +211,8 @@ class Profile(db.Model):
             # When all targets have been emailed, the job has to be cancelled
             else:
                 sched.remove_job(job_id=job_id)
+                with app.app_context():
+                    app.logger.info(f'Campaign {job_id} completed')
                 return
 
         return
