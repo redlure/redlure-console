@@ -9,7 +9,7 @@ import logging
 from flask_cors import CORS
 from logging.handlers import RotatingFileHandler
 
-
+print('hello there!')
 app = Flask(__name__)
 app.debug = True
 CORS(app, supports_credentials=True)
