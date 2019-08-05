@@ -158,7 +158,7 @@ class Profile(db.Model):
         except Exception:
            return False
     
-    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time):
+    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port):
         """
         Schedules a campaign to execute in a separate thread. The user decides when it will run, how many emails to send at a time, and how long to wait between batches.
         @param email:
@@ -180,18 +180,21 @@ class Profile(db.Model):
         if not batch_size: batch_size = len(targets)
         if not interval: interval = 0
 
-        app.logger.info(f'Campaign started. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
+        print(f'Campaign starts at {start_time}')   
+
         # Schedule the campaign and intialize it
         try:
-            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched])
+            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port])
         except Exception:
             app.logger.exception(f'Error scheduling campaign {campaign_id}')
-        
+        else:
+            app.logger.info(f'Campaign scheduled. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
+
         sched.start()
         
         return
 
-    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched):
+    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, data, total_recipients, ip, port):
         """
         Sends emails to the targets in batches.  This function alwasy runs on a separate thread.
         @param recipients: list - all remaining targets to send an email to for the specified campaign
@@ -202,7 +205,15 @@ class Profile(db.Model):
         @param batch_size: int - Number of emails to send at once
         @param sched: Schedule Instance - this is necessary to kill of the job 
         """
-
+        # tell worker to start hosting at start of campaign
+        if len(recipients) == total_recipients:
+            print('setting up worker')
+            
+            if not self.start_worker(data, ip, port):
+                print('Worker failed!')
+                sched.remove_job(job_id=job_id)
+                return
+                
         for _ in range(batch_size):
             if recipients:
                 recipient = recipients.pop()
@@ -233,6 +244,18 @@ class Profile(db.Model):
 
         return
     
+    @staticmethod
+    def start_worker(data, ip, port):
+        params = {'key': APIKey.query.first().key}
+        r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
+        print(r.status_code)
+        if r.status_code == 400:
+          return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
+        if r.status_code != 200:
+            return False
+        return 
+
+
 class ProfileSchema(Schema):
     id = fields.Number()
     name = fields.Str()
@@ -609,17 +632,18 @@ class Campaign(db.Model):
 
 
     def cast(self, data):
+
         # tell worker to start hosting
         #params = {'key': APIKey.query.first().key}
         #r = requests.post('https://%s:%d/campaigns/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
         #if r.status_code == 400:
         #   return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
 
-        # start sending emails
+        # Schedule the campaign
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
-        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time )
+        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port )
         self.status = 'Active'
-        #self.start_date = datetime.utcnow
+
         db.session.commit()
 
 
