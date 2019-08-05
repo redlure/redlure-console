@@ -1066,11 +1066,6 @@ def campaigns(workspace_id):
                 start_time=start_time, send_interval=interval, batch_size=batch_size, \
                 list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url, \
                 payload_url=payload_url)
-        
-        #for page in pages:
-            #print(campaign.id)
-        print('pages ',  pages)
-        print(f'campaign: {campaign}')
 
         db.session.add(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
@@ -1170,7 +1165,7 @@ def cast(workspace_id, campaign_id):
     '''
     For GET requests, kick off the given campaign.
     '''
-
+    print('casting')
     if not validate_workspace(workspace_id):
         return json.dumps({'success': False, 'reasonCode': 1}), 200, {'ContentType':'application/json'}
 

@@ -144,6 +144,10 @@ class Profile(db.Model):
 
     
     def send_test_mail(self, address):
+        """ 
+        Sends a test email to ensure everything is configured properly
+        @param address: str - recipient of the email
+        """
         self.set_mail_configs()
         mail = Mail(app)
         msg = Message('redlure test', sender=self.from_address, recipients=[address])
@@ -151,7 +155,7 @@ class Profile(db.Model):
         try:
             mail.send(msg)
             return True
-        except:
+        except Exception:
            return False
     
     def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time):
@@ -163,7 +167,7 @@ class Profile(db.Model):
         @param base_url: 
         @param interval: int - 
         @param batch_size: int - Number of emails to send at once
-        @param start_time: 
+        @param start_time: datetime - Time in which to kickoff the campaign
         """
         # Configurations
         self.set_mail_configs()
@@ -172,9 +176,17 @@ class Profile(db.Model):
         job_id = str(campaign_id)
         targets = list(targets)
 
+        # In case the batch size or interval are blank, set them appropriately 
+        if not batch_size: batch_size = len(targets)
+        if not interval: interval = 0
+
         app.logger.info(f'Campaign started. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
         # Schedule the campaign and intialize it
-        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched])
+        try:
+            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched])
+        except Exception:
+            app.logger.exception(f'Error scheduling campaign {campaign_id}')
+        
         sched.start()
         
         return
@@ -196,13 +208,17 @@ class Profile(db.Model):
                 recipient = recipients.pop()
                 #TODO: prep html
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                
+                msg.html = email.prep_html(base_url=base_url, target=recipient)
+
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
-                    mail.send(msg)
-                    app.logger.info(f'Email succesflly sent to {recipient.email}')
+                    try:
+                        mail.send(msg)
+                    except Exception:
+                        app.logger.exception(f'Error sending email to {recipient.email}')
+                    else:
+                        app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {job_id}')
 
-                
                 # Updates email's status in database
                 result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
                 result.status = 'Sent'
