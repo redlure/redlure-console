@@ -154,7 +154,7 @@ class Profile(db.Model):
         except:
            return False
     
-    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time):
+    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port):
         """
         Schedules a campaign to execute in a separate thread. The user decides when it will run, how many emails to send at a time, and how long to wait between batches.
         @param email:
@@ -172,14 +172,18 @@ class Profile(db.Model):
         job_id = str(campaign_id)
         targets = list(targets)
 
+        # Ensures that batch_size and interval are set
+        batch_size = len(targets) if not batch_size else batch_size
+        interval = 0 if not interval else interval
+
         print(f'Attempting to send {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
         # Schedule the campaign and intialize it
-        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched])
+        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched, len(targets), data, ip, port])
         sched.start()
         
         return
 
-    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched):
+    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, total_recipients, data, ip, port):
         """
         Sends emails to the targets in batches.  This function alwasy runs on a separate thread.
         @param recipients: list - all remaining targets to send an email to for the specified campaign
@@ -191,11 +195,28 @@ class Profile(db.Model):
         @param sched: Schedule Instance - this is necessary to kill of the job 
         """
 
+        # At the start of the campaign, the worker must be put to work 
+        if len(recipients) == total_recipients:
+            #TODO: log this
+            print('Campaign started')
+            # If the worker gives an issue, kill off the campaign and log the error
+            worker_response = self.start_worker(data, ip, port)
+            if worker_response != 200:
+                sched.remove_job(job_id)
+                print('worker failed! Campaign failed to start')
+                #TODO: log the error
+                #TODO: Make it so campaign is not marked as comlete
+                return
+            else:
+                #TODO: log this
+                print('Worker started succesfully')
+            
         for _ in range(batch_size):
             if recipients:
                 recipient = recipients.pop()
-                #TODO: prep html
+                
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
+                msg.html = self.prep_html(base_url=base_url, target=recipient)
                 
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
@@ -206,12 +227,21 @@ class Profile(db.Model):
                 result.status = 'Sent'
                 db.session.commit()
             
-            # When all targets have been emailed, the job has to be cancelled
+            # When all targets have been emailed, the job has to be explicitly removed
             else:
                 sched.remove_job(job_id=job_id)
                 return
 
         return
+
+    @staticmethod
+    def start_worker(data, ip, port):
+        # tell worker to start hosting
+        params = {'key': APIKey.query.first().key}
+        r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
+        if r.status_code == 400:
+            return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
+        return 300
     
 class ProfileSchema(Schema):
     id = fields.Number()
@@ -597,7 +627,7 @@ class Campaign(db.Model):
 
         # start sending emails
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
-        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time )
+        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port)
         self.status = 'Active'
         #self.start_date = datetime.utcnow
         db.session.commit()
@@ -630,7 +660,7 @@ class CampaignSchema(Schema):
     status = fields.Str()
     payload_url = fields.Str()
     start_time = fields.DateTime()
-    #end_date = fields.DateTime()
+    #end_date = fields.DateTime()sch
 
 
 class WorkerCampaignSchema(Schema):
