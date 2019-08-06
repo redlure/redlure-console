@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages, ResultCampaignSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema,  ResultCampaignSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -1008,8 +1008,8 @@ def campaigns(workspace_id):
         all_campaigns = Campaign.query.filter_by(workspace_id=workspace_id).order_by(Campaign.updated_at.desc()).all()
         
         # sort the pages associated with the campaign by index
-        for campaign in all_campaigns:
-            campaign.pages.sort(key=lambda camp: camp.index)
+        # for campaign in all_campaigns:
+        #     campaign.pages.sort(key=lambda camp: camp.index)
         
         schema = CampaignSchema(many=True, strict=True)
         campaign_data = schema.dump(all_campaigns)
@@ -1078,9 +1078,8 @@ def campaigns(workspace_id):
         
         for idx, page in enumerate(pages):
             #Todo: fix somethingn in hbere
-            page_association = Campaignpages(campaign_id=campaign.id, page_id=page.id, index=idx)
-            db.session.add(page_association)
-            db.session.commit()
+            campaign.pages.append(page)
+        db.session.commit()
         print('down here')
         return json.dumps({'success': True, 'id': campaign.id}), 200, {'ContentType':'application/json'}
 

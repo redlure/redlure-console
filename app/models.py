@@ -561,14 +561,13 @@ class APIKeySchema(Schema):
     key = fields.Str()
 
 
-# Association Object for campaigns and pages
-class Campaignpages(db.Model):
-    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
-    page_id = db.Column(db.Integer, db.ForeignKey('page.id'), primary_key=True)
-    index = db.Column(db.Integer)
 
-    page = db.relationship('Page', backref='campaigns', cascade='delete')
-    campaign = db.relationship('Campaign', backref='pages', cascade='delete', order_by='asc(Campaignpages.index)')
+# New Association Object for campaigns and pages
+campaign_pages = db.Table('campaign_pages',
+    db.Column('campaign_id', db.Integer, db.ForeignKey('campaign.id')),
+    db.Column('pages_id', db.Integer, db.ForeignKey('page.id'))
+)
+
 
 
 class CampaignpagesSchema(Schema):
@@ -582,8 +581,6 @@ class Campaign(db.Model):
     name = db.Column(db.String(64), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
-    #pages = db.relationship('Page', secondary=campaign_pages, lazy=True, backref=db.backref('campaigns', lazy=True))
-    #pages = db.relationship('Page', secondary='Campaignpages')
     redirect_url = db.Column(db.String(64), nullable=True)
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
@@ -600,6 +597,7 @@ class Campaign(db.Model):
     send_interval = db.Column(db.Integer, default=0)  # Number of minutes to wait between sending batch of emails
     batch_size = db.Column(db.Integer)
     payload_url = db.Column(db.String(64))
+    pages = db.relationship('Page', secondary=campaign_pages, backref=db.backref('campaigns', lazy='dynamic'))
     
 
     def __init__(self, **kwargs):

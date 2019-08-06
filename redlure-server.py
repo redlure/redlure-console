@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from app import app, db
-from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form, Campaignpages
+from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form
 import subprocess
 import os
 import shlex
@@ -25,7 +25,6 @@ def make_shell_context():
         'Server': Server,
         'APIKey': APIKey,
         'Form': Form,
-        'Campaignpages': Campaignpages,
     }
 
 
