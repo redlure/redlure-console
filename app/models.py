@@ -133,6 +133,10 @@ class Profile(db.Model):
         app.config['MAIL_USE_SSL'] = self.ssl
 
     def send_test_mail(self, address):
+        """ 
+        Sends a test email to ensure everything is configured properly
+        @param address: str - recipient of the email
+        """
         self.set_mail_configs()
         mail = Mail(app)
         msg = Message('redlure test', sender=self.from_address, recipients=[address])
@@ -140,7 +144,7 @@ class Profile(db.Model):
         try:
             mail.send(msg)
             return True
-        except:
+        except Exception:
            return False
     
     def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port):
@@ -152,7 +156,7 @@ class Profile(db.Model):
         @param base_url: 
         @param interval: int - 
         @param batch_size: int - Number of emails to send at once
-        @param start_time: 
+        @param start_time: datetime - Time in which to kickoff the campaign
         """
         # Configurations
         self.set_mail_configs()
@@ -168,11 +172,25 @@ class Profile(db.Model):
         print(f'Attempting to send {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
         # Schedule the campaign and intialize it
         sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched, len(targets), data, ip, port])
+        # In case the batch size or interval are blank, set them appropriately 
+        if not batch_size: batch_size = len(targets)
+        if not interval: interval = 0
+
+        print(f'Campaign starts at {start_time}')   
+
+        # Schedule the campaign and intialize it
+        try:
+            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port])
+        except Exception:
+            app.logger.exception(f'Error scheduling campaign {campaign_id}')
+        else:
+            app.logger.info(f'Campaign scheduled. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
+
         sched.start()
         
         return
 
-    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, total_recipients, data, ip, port):
+    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, data, total_recipients, ip, port):
         """
         Sends emails to the targets in batches.  This function alwasy runs on a separate thread.
         @param recipients: list - all remaining targets to send an email to for the specified campaign
@@ -205,12 +223,17 @@ class Profile(db.Model):
                 recipient = recipients.pop()
                 
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                msg.html = self.prep_html(base_url=base_url, target=recipient)
-                
+                msg.html = email.prep_html(base_url=base_url, target=recipient)
+
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
-                    mail.send(msg)
-                
+                    try:
+                        mail.send(msg)
+                    except Exception:
+                        app.logger.exception(f'Error sending email to {recipient.email}')
+                    else:
+                        app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {job_id}')
+
                 # Updates email's status in database
                 result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
                 result.status = 'Sent'
@@ -219,6 +242,8 @@ class Profile(db.Model):
             # When all targets have been emailed, the job has to be explicitly removed
             else:
                 sched.remove_job(job_id=job_id)
+                with app.app_context():
+                    app.logger.info(f'Campaign {job_id} completed')
                 return
 
         return
@@ -232,6 +257,18 @@ class Profile(db.Model):
             return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
         return 300
     
+    @staticmethod
+    def start_worker(data, ip, port):
+        params = {'key': APIKey.query.first().key}
+        r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
+        print(r.status_code)
+        if r.status_code == 400:
+          return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
+        if r.status_code != 200:
+            return False
+        return 
+
+
 class ProfileSchema(Schema):
     id = fields.Number()
     name = fields.Str()
