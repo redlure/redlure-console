@@ -169,24 +169,20 @@ class Profile(db.Model):
         batch_size = len(targets) if not batch_size else batch_size
         interval = 0 if not interval else interval
 
-        print(f'Attempting to send {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
         # Schedule the campaign and intialize it
-        sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched, len(targets), data, ip, port])
+        current_jobs = sched.get_jobs()
         # In case the batch size or interval are blank, set them appropriately 
         if not batch_size: batch_size = len(targets)
         if not interval: interval = 0
 
-        print(f'Campaign starts at {start_time}')   
-
         # Schedule the campaign and intialize it
         try:
-            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port])
+            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port])
         except Exception:
             app.logger.exception(f'Error scheduling campaign {campaign_id}')
         else:
             app.logger.info(f'Campaign scheduled. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
-
-        sched.start()
+            sched.start()
         
         return
 
@@ -201,29 +197,27 @@ class Profile(db.Model):
         @param batch_size: int - Number of emails to send at once
         @param sched: Schedule Instance - this is necessary to kill of the job 
         """
-
         # At the start of the campaign, the worker must be put to work 
         if len(recipients) == total_recipients:
-            #TODO: log this
-            print('Campaign started')
+            app.logger.info('Attemping to set up worker for campaign')
             # If the worker gives an issue, kill off the campaign and log the error
             worker_response = self.start_worker(data, ip, port)
             if worker_response != 200:
-                sched.remove_job(job_id)
-                print('worker failed! Campaign failed to start')
-                #TODO: log the error
-                #TODO: Make it so campaign is not marked as comlete
-                return
+                                
+                app.logger.error(f'Campaign failed to start becasue the worker gave a {worker_response} code')
+                
+                #TODO: Make it so campaign is not marked as comlete when worker fails
+                # sched.remove_job(job_id)
+                # return
             else:
-                #TODO: log this
-                print('Worker started succesfully')
+                app.logger.info('Campaign successfully started on worker')
             
         for _ in range(batch_size):
             if recipients:
                 recipient = recipients.pop()
                 
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                msg.html = email.prep_html(base_url=base_url, target=recipient)
+                #msg.html = email.prep_html(base_url=base_url, target=recipient)
 
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
@@ -253,21 +247,12 @@ class Profile(db.Model):
         # tell worker to start hosting
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
+        if 200 == r.status_code:
+            return 200
         if r.status_code == 400:
             return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
-        return 300
+        return 500
     
-    @staticmethod
-    def start_worker(data, ip, port):
-        params = {'key': APIKey.query.first().key}
-        r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
-        print(r.status_code)
-        if r.status_code == 400:
-          return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
-        if r.status_code != 200:
-            return False
-        return 
-
 
 class ProfileSchema(Schema):
     id = fields.Number()
