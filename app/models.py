@@ -208,7 +208,7 @@ class Profile(db.Model):
                 
                 #TODO: Make it so campaign is not marked as comlete when worker fails
                 # sched.remove_job(job_id)
-                # return
+                return
             else:
                 app.logger.info('Campaign successfully started on worker')
             
@@ -217,7 +217,7 @@ class Profile(db.Model):
                 recipient = recipients.pop()
                 
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                #msg.html = email.prep_html(base_url=base_url, target=recipient)
+                msg.html = email.prep_html(base_url=base_url, target=recipient)
 
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
@@ -596,6 +596,7 @@ class Campaign(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     status = db.Column(db.String(32), nullable=False)
     start_time = db.Column(db.DateTime, nullable=True, default='')
+    #end_time = db.Column(db.DateTime, nullable=True, default='')
     send_interval = db.Column(db.Integer, default=0)  # Number of minutes to wait between sending batch of emails
     batch_size = db.Column(db.Integer)
     payload_url = db.Column(db.String(64))
@@ -630,9 +631,11 @@ class Campaign(db.Model):
         payload = {'id': self.id, 'port': self.port}
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
-        self.status = 'Complete'
-        #self.end_date = datetime.utcnow
-        db.session.commit()
+        if r.status_code == 200:
+            self.status = 'Complete'
+            #self.end_date = datetime.utcnow
+            db.session.commit()
+        return r.status_code
 
 
 class CampaignSchema(Schema):
