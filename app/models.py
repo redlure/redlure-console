@@ -117,7 +117,7 @@ class Profile(db.Model):
     tls = db.Column(db.Boolean, default=False, nullable=False)
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    campaigns = db.relationship('Campaign', backref='profile')
+    campaigns = db.relationship('Campaign', backref='profile', cascade='all, delete-orphan')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -207,7 +207,7 @@ class Profile(db.Model):
                 app.logger.error(f'Campaign failed to start becasue the worker gave a {worker_response} code')
                 
                 #TODO: Make it so campaign is not marked as comlete when worker fails
-                # sched.remove_job(job_id)
+                sched.remove_job(job_id)
                 return
             else:
                 app.logger.info('Campaign successfully started on worker')
@@ -217,7 +217,7 @@ class Profile(db.Model):
                 recipient = recipients.pop()
                 
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                msg.html = email.prep_html(base_url=base_url, target=recipient)
+                msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id)
 
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
@@ -247,10 +247,10 @@ class Profile(db.Model):
         # tell worker to start hosting
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
-        if 200 == r.status_code:
+        if r.status_code == 200:
             return 200
         if r.status_code == 400:
-            return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
+            return 400
         return 500
     
 
@@ -275,7 +275,7 @@ class Person(db.Model):
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    result = db.relationship('Result', backref='person', lazy=False, cascade='all,delete', uselist=False)
+    results = db.relationship('Result', backref='person', lazy=False, cascade='all,delete')
 
     def __repr__(self):
         return '<Person {}>'.format(self.email)
@@ -326,18 +326,30 @@ class Email(db.Model):
     def __repr__(self):
         return '<Email {}>'.format(self.name)
 
-    def prep_html(self, base_url, target):
+    def prep_html(self, base_url, target, campaign_id):
         '''
         Replace variables in the email HTML with proper values and insert the tracking image URL if needed.
         '''
-        # TODO; remove placeholder IP
-        base_url = 'http://10.1.2.180:8080/'
+        # get result for this target in this campaign
+        result = Result.query.filter_by(campaign_id=int(campaign_id), person_id=target.id).first()
+        # get if campaign is using SSL
+        ssl = result.campaign.ssl
+        # get port the worker will host on
+        port = result.campaign.port
+        # get the domain name the campaign is using
+        domain = result.campaign.domain.domain
+
+        if ssl:
+            base_url = f'https://{domain}:{port}'
+        else:
+            base_url = f'http://{domain}:{port}'
+
         html = self.html
-        html = html.replace(b'{{ fname }}', str.encode(target.first_name))
-        html = html.replace(b'{{ lname }}', str.encode(target.last_name))
-        html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
-        html = html.replace(b'{{ url }}', str.encode('%s' % target.result.tracker))
-        html = html.replace(b'{{ id }}', str.encode(target.result.tracker))
+        if target.first_name: html = html.replace(b'{{ fname }}', str.encode(target.first_name))
+        if target.last_name: html = html.replace(b'{{ lname }}', str.encode(target.last_name))
+        if target.first_name and target.last_name: html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
+        html = html.replace(b'{{ url }}', str.encode('%s/%s' % (base_url, result.tracker)))
+        html = html.replace(b'{{ id }}', str.encode(result.tracker))
         
         soup = BeautifulSoup(html, features='lxml')
         base = soup.new_tag('base', href=base_url)
@@ -345,7 +357,8 @@ class Email(db.Model):
         soup.insert(1, base)
 
         if self.track:
-            tracker = soup.new_tag('img', alt='', src='%s/pixel.png' % (target.result.tracker))
+            #TODO; remove placeholder IP
+            tracker = soup.new_tag('img', alt='', src=f'{base_url}/{result.tracker}/pixel.png')
             soup.find('body').insert_after(tracker)
         html = str(soup).encode()
 
@@ -371,6 +384,7 @@ class Page(db.Model):
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    campaigns = db.relationship('Campaignpages', backref='page', cascade='all, delete-orphan')
 
 
     def __repr__(self):
@@ -448,7 +462,7 @@ class FormSchema(Schema):
     data = fields.Dict()
 
     @post_dump
-    def serialize_form(self, data):
+    def serialize_form(self, data, **kwargs):
         '''
         Convert the submitted form data from type String back to Dict
         '''
@@ -566,11 +580,13 @@ class APIKeySchema(Schema):
     key = fields.Str()
 
 
-# New Association Object for campaigns and pages
-campaign_pages = db.Table('campaign_pages',
-    db.Column('campaign_id', db.Integer, db.ForeignKey('campaign.id')),
-    db.Column('pages_id', db.Integer, db.ForeignKey('page.id'))
-)
+# Association Object for campaigns and pages
+class Campaignpages(db.Model):
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
+    page_id = db.Column(db.Integer, db.ForeignKey('page.id'), primary_key=True)
+    index = db.Column(db.Integer)
+    #page = db.relationship('Page', backref='campaigns')
+    #campaign = db.relationship('Campaign', backref='pages', lazy='joined', cascade='all, delete', order_by='asc(Campaignpages.index)')
 
 
 class CampaignpagesSchema(Schema):
@@ -583,12 +599,12 @@ class Campaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
+    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=True)
     redirect_url = db.Column(db.String(64), nullable=True)
-    profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
-    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=True)
+    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=True)
+    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=True)
     port = db.Column(db.Integer, nullable=False)
     ssl = db.Column(db.Boolean, nullable=False)
     results = db.relationship('Result', backref='campaign', lazy=True, cascade='all,delete')
@@ -600,7 +616,7 @@ class Campaign(db.Model):
     send_interval = db.Column(db.Integer, default=0)  # Number of minutes to wait between sending batch of emails
     batch_size = db.Column(db.Integer)
     payload_url = db.Column(db.String(64))
-    pages = db.relationship('Page', secondary=campaign_pages, backref=db.backref('campaigns', lazy='dynamic'))
+    pages = db.relationship('Campaignpages', backref='campaign', cascade='all, delete-orphan')
     
 
     def __init__(self, **kwargs):
@@ -611,12 +627,19 @@ class Campaign(db.Model):
         return '<Campaign {}>'.format(self.name)
 
     
-    def prep_tracking(self):
-        for target in self.list.targets:
+    def prep_tracking(self, targets):
+        for target in targets:
             tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
-            result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
-            db.session.add(result)
-        db.session.commit()
+
+            # make sure the tracker is not a repeat
+            result = Result.query.filter_by(tracker=tracker).first()
+            
+            if result is None:
+                result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
+                db.session.add(result)
+                db.session.commit()
+            else:
+                self.prep_tracking(self,targets=[target])
 
 
     def cast(self, data):

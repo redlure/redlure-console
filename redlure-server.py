@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from app import app, db
-from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form
+from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form, Campaignpages
 import subprocess
 import os
 import shlex
@@ -25,6 +25,7 @@ def make_shell_context():
         'Server': Server,
         'APIKey': APIKey,
         'Form': Form,
+        'Campaignpages': Campaignpages
     }
 
 
@@ -62,6 +63,22 @@ def init_db():
     db.session.commit()
 
     key = APIKey()
+
+    profile = Profile(workspace_id=1, name="test", from_address="Mark <mdrobka@calypso-erie.com>", smtp_host="mx.mailsmurf.com", smtp_port=587, tls=True, ssl=False, username="mdrobka@calypso-erie.com", password="ntiteiLOy412")
+    db.session.add(profile)
+    target = List(workspace_id=1, name="test", targets=[Person(email="mcreel31@gmail.com")])
+    db.session.add(target)
+    email = Email(workspace_id=1, name="test", subject="test", html="<p>Click here {{ url }}<p>".encode(), track=True)
+    db.session.add(email)
+    page1 = Page(workspace_id=1, name="OWA", html="this is an OWA page!".encode(), url="/owa")
+    page2 = Page(workspace_id=1, name="crappy page", html="this page sucks".encode(), url="/blah")
+    db.session.add(page1)
+    db.session.add(page2)
+    s = Server(ip="10.1.5.53", port=4445, alias="Kali")
+    d = Domain(domain="phishmelab.com")
+    db.session.add(s)
+    db.session.add(d)
+    db.session.commit()
 
 
 def gen_certs():

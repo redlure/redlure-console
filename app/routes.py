@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema,  ResultCampaignSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages, ResultCampaignSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -1072,10 +1072,19 @@ def campaigns(workspace_id):
         db.session.commit()
         
         for idx, page in enumerate(pages):
-            #Todo: fix somethingn in hbere
-            campaign.pages.append(page)
-        db.session.commit()
-        print('down here')
+            print(page.name,idx)
+            #page_association = Campaignpages(index=idx)
+            #campaign.pages.append(page_association)
+            page_association = Campaignpages(campaign_id=campaign.id, page_id=page.id, index=idx)
+            db.session.add(page_association)
+            db.session.commit()
+
+        schema = WorkerCampaignSchema()
+        campaign_data = schema.dump(campaign)
+    
+        campaign.prep_tracking(campaign.list.targets)
+        campaign.cast(campaign_data)
+
         return json.dumps({'success': True, 'id': campaign.id}), 200, {'ContentType':'application/json'}
 
 

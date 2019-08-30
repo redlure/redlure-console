@@ -38,9 +38,16 @@ def clone_link(link):
         r = requests.get(link, verify=False)
 
         if r.status_code == 200:
+            # add base tag to html to load external resources
             soup = BeautifulSoup(r.content, features='lxml')
             base = soup.new_tag('base', href=link)
             soup.find('head').insert_before(base)
+
+            # if page has a form, set action to next_url placeholder
+            try:
+                soup.find('form')['action'] = '{{ next_url }}'
+            except:
+                pass
             return json.dumps({'success': True, 'html': str(soup)}), 200, {'ContentType':'application/json'}
         else:
             return json.dumps({'success': False, 'message': 'Error collecting site source'}), 200, {'ContentType':'application/json'}
