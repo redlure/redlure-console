@@ -64,8 +64,6 @@ def init_db():
 
     key = APIKey()
 
-    profile = Profile(workspace_id=1, name="test", from_address="Mark <mdrobka@calypso-erie.com>", smtp_host="mx.mailsmurf.com", smtp_port=587, tls=True, ssl=False, username="mdrobka@calypso-erie.com", password="ntiteiLOy412")
-    db.session.add(profile)
     target = List(workspace_id=1, name="test", targets=[Person(email="mcreel31@gmail.com")])
     db.session.add(target)
     email = Email(workspace_id=1, name="test", subject="test", html="<p>Click here {{ url }}<p>".encode(), track=True)
