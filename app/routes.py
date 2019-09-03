@@ -657,7 +657,7 @@ def targetlists(workspace_id):
 
     # request is a GET
     if request.method == 'GET':
-        workspace_lists = List.query.filter_by(workspace_id=workspace_id).all()
+        workspace_lists = List.query.filter_by(workspace_id=workspace_id).order_by(List.updated_at.desc()).all()
         schema = ListSchema(many=True)
         list_data = schema.dump(workspace_lists)
         return jsonify(list_data)
