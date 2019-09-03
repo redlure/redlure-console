@@ -38,9 +38,16 @@ def clone_link(link):
         r = requests.get(link, verify=False)
 
         if r.status_code == 200:
+            # add base tag to html to load external resources
             soup = BeautifulSoup(r.content, features='lxml')
             base = soup.new_tag('base', href=link)
             soup.find('head').insert_before(base)
+
+            # if page has a form, set action to next_url placeholder
+            try:
+                soup.find('form')['action'] = '{{ next_url }}'
+            except:
+                pass
             return json.dumps({'success': True, 'html': str(soup)}), 200, {'ContentType':'application/json'}
         else:
             return json.dumps({'success': False, 'message': 'Error collecting site source'}), 200, {'ContentType':'application/json'}
@@ -144,3 +151,19 @@ def convert_to_bool(value):
         return False
     else:
         return -1
+
+
+def convert_to_datetime(dt_string):
+    '''
+    Converts a string to a datetime object
+    
+    Example 
+    Input: '2019-07-31T10:30:30-04:00' (str)
+    Output: 2019-07-31 10:30:30 (datetime)
+    '''
+    send_date, send_time = dt_string.split('T')
+    send_time = send_time.split('-')[0]
+    send_datetime = f'{send_date} {send_time}'
+    send_datetime = datetime.strptime(send_datetime, '%Y-%m-%d %H:%M:%S')
+
+    return send_datetime

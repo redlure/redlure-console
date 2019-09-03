@@ -4,10 +4,11 @@ from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchem
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
-from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts
+from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts, convert_to_datetime
 import json
 import subprocess
 from flask_cors import cross_origin  
+from datetime import datetime
 
 
 @app.route('/login', methods=['POST'])
@@ -68,9 +69,9 @@ def api():
     if key is None:
         return 'no key yet', 404
 
-    schema = APIKeySchema(strict=True)
+    schema = APIKeySchema()
     key_data = schema.dump(key)
-    return jsonify(key_data[0])
+    return jsonify(key_data)
 
 
 @app.route('/api/generate')
@@ -86,9 +87,9 @@ def generate_api():
     else:
         key.generate_key()
     
-    schema = APIKeySchema(strict=True)
+    schema = APIKeySchema()
     key_data = schema.dump(key)
-    return jsonify(key_data[0])
+    return jsonify(key_data)
 
 
 @app.route('/users', methods=['GET', 'POST'])
@@ -101,9 +102,9 @@ def users():
     '''
     if request.method == 'GET':
         all_users = User.query.all()
-        schema = UserSchema(many=True, strict=True)
+        schema = UserSchema(many=True)
         users = schema.dump(all_users)
-        return jsonify(users[0])
+        return jsonify(users)
     # request is a POST
     else:
         username = request.form.get('Username')
@@ -120,9 +121,9 @@ def users():
         user.set_password(request.form.get('Password'))
         db.session.add(user)
         db.session.commit()
-        schema = UserSchema(strict=True)
+        schema = UserSchema()
         user_data = schema.dump(user)
-        return jsonify(user_data[0]), 201
+        return jsonify(user_data), 201
 
 
 @app.route('/users/<user_id>', methods=['GET', 'DELETE'])
@@ -140,7 +141,7 @@ def user(user_id):
 
     # request is a GET
     if request.method == 'GET':
-        schema = UserSchema(strict=True)
+        schema = UserSchema()
         user_data = schema.dump(user)
         return jsonify(user_data)
     
@@ -166,9 +167,9 @@ def domains():
     # request is a GET
     if request.method == 'GET':
         all_domains = Domain.query.all()
-        schema = DomainSchema(many=True, strict=True)
+        schema = DomainSchema(many=True)
         domain_data = schema.dump(all_domains)
-        return jsonify(domain_data[0])
+        return jsonify(domain_data)
 
     # request is a POST
     elif request.method == 'POST':
@@ -185,9 +186,9 @@ def domains():
         db.session.add(domain_obj)
         db.session.commit()
 
-        schema = DomainSchema(strict=True)
+        schema = DomainSchema()
         domain_data = schema.dump(domain_obj)
-        return jsonify(domain_data[0]), 201
+        return jsonify(domain_data), 201
 
 
 @app.route('/domains/refresh', methods=['GET'])
@@ -220,7 +221,7 @@ def domain(domain_id):
     # request is a GET
     if request.method == 'GET':
         domain_obj.update_ip()
-        schema = DomainSchema(strict=True)
+        schema = DomainSchema()
         domain_data = schema.dump(domain_obj)
         return jsonify(domain_data)
 
@@ -283,9 +284,9 @@ def servers():
     # request is a GET
     if request.method == 'GET':
         all_servers = Server.query.all()
-        schema = ServerSchema(many=True, strict=True)
+        schema = ServerSchema(many=True)
         server_data = schema.dump(all_servers)
-        return jsonify(server_data[0])
+        return jsonify(server_data)
 
     # request is a POST
     elif request.method == 'POST':
@@ -298,9 +299,9 @@ def servers():
             return 'server already exists', 400
         
         server_obj = Server(ip=ip, alias=alias, port=port)
-        schema = ServerSchema(strict=True)
+        schema = ServerSchema()
         server_data = schema.dump(server_obj)
-        return jsonify(server_data[0]), 201
+        return jsonify(server_data), 201
 
 
 @app.route('/servers/<server_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -319,7 +320,7 @@ def server(server_id):
 
     # request is a GET
     if request.method == 'GET':
-        schema = ServerSchema(strict=True)
+        schema = ServerSchema()
         server_data = schema.dump(server_obj)
         return jsonify(server_data)
 
@@ -377,9 +378,9 @@ def profiles(workspace_id):
 
     if request.method == 'GET':
         all_profiles = Profile.query.filter_by(workspace_id=workspace_id).order_by(Profile.updated_at.desc()).all()
-        schema = ProfileSchema(many=True, strict=True)
+        schema = ProfileSchema(many=True)
         profiles = schema.dump(all_profiles)
-        return jsonify(profiles[0])
+        return jsonify(profiles)
     # request is a POST
     else:
         name = request.form.get('Name')
@@ -407,9 +408,9 @@ def profiles(workspace_id):
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
 
-        schema = ProfileSchema(strict=True)
+        schema = ProfileSchema()
         profile_data = schema.dump(profile)
-        return jsonify(profile_data[0]), 201
+        return jsonify(profile_data), 201
 
 
 @app.route('/workspaces/<workspace_id>/profiles/<profile_id>', methods=['GET', 'POST', 'DELETE', 'PUT'])
@@ -430,7 +431,7 @@ def profile(workspace_id, profile_id):
 
     # request is a GET
     if request.method == 'GET':
-        schema = ProfileSchema(strict=True)
+        schema = ProfileSchema()
         profile_data = schema.dump(profile)
         return jsonify(profile_data)
 
@@ -463,6 +464,7 @@ def profile(workspace_id, profile_id):
         tls = request.form.get('TLS')
         ssl = request.form.get('SSL')
 
+
         same_profile = Profile.query.filter_by(name=name).first()
 
         if same_profile is not None and str(same_profile.id) != profile_id:
@@ -486,9 +488,9 @@ def profile(workspace_id, profile_id):
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
 
-        schema = ProfileSchema(strict=True)
+        schema = ProfileSchema()
         profile_data = schema.dump(profile)
-        return jsonify(profile_data[0]), 200
+        return jsonify(profile_data), 200
 
 
 @app.route('/workspaces', methods=['GET', 'POST'])
@@ -502,9 +504,9 @@ def workspaces():
     '''
     if request.method == 'GET':
         all_workspaces = Workspace.query.filter(Workspace.roles.contains(current_user.role)).order_by(Workspace.updated_at.desc()).all()
-        schema = WorkspaceSchema(many=True, strict=True)
+        schema = WorkspaceSchema(many=True)
         workspaces = schema.dump(all_workspaces)
-        return jsonify(workspaces[0])
+        return jsonify(workspaces)
     else:
         # request is a POST
         name = request.form.get('Name')
@@ -516,9 +518,9 @@ def workspaces():
                 admin.workspaces.append(workspace)
             db.session.add(workspace)
             db.session.commit()
-            schema = WorkspaceSchema(strict=True)
+            schema = WorkspaceSchema()
             workspace_data = schema.dump(workspace)
-            return jsonify(workspace_data[0]), 201
+            return jsonify(workspace_data), 201
         else:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
@@ -538,9 +540,9 @@ def workspace(workspace_id):
 
     # request is a GET
     if request.method == 'GET':
-        schema = WorkspaceSchema(strict=True)
+        schema = WorkspaceSchema()
         workspace_data = schema.dump(workspace)
-        return jsonify(workspace_data[0])
+        return jsonify(workspace_data)
 
     # request is a DELETE
     elif request.method == 'DELETE':
@@ -575,9 +577,9 @@ def roles():
     # request is a GET
     if request.method == 'GET':
         all_roles = Role.query.all()
-        schema = RoleSchema(many=True, strict=True)
+        schema = RoleSchema(many=True)
         roles = schema.dump(all_roles)
-        return jsonify(roles[0])
+        return jsonify(roles)
 
     # request is a POST
     elif request.method == 'POST':
@@ -596,9 +598,9 @@ def roles():
             role.workspaces.append(general_ws)
         db.session.add(role)
         db.session.commit()       
-        schema = RoleSchema(strict=True)
+        schema = RoleSchema()
         role_data = schema.dump(role)
-        return jsonify(role_data[0]), 201
+        return jsonify(role_data), 201
 
 
 @app.route('/roles/<role_id>', methods=['GET', 'DELETE', 'PUT'])
@@ -617,7 +619,7 @@ def role(role_id):
 
     # request is a GET
     if request.method == 'GET':
-        schema = RoleSchema(strict=True)
+        schema = RoleSchema()
         role_data = schema.dump(role)
         return jsonify(role_data)
 
@@ -637,9 +639,9 @@ def role(role_id):
 
         role.workspaces = workspaces
         db.session.commit()
-        schema = RoleSchema(strict=True)
+        schema = RoleSchema()
         role_data = schema.dump(role)
-        return jsonify(role_data[0]), 201
+        return jsonify(role_data), 201
 
 
 @app.route('/workspaces/<workspace_id>/lists', methods = ['GET', 'POST'])
@@ -656,9 +658,9 @@ def targetlists(workspace_id):
     # request is a GET
     if request.method == 'GET':
         workspace_lists = List.query.filter_by(workspace_id=workspace_id).order_by(List.updated_at.desc()).all()
-        schema = ListSchema(many=True, strict=True)
+        schema = ListSchema(many=True)
         list_data = schema.dump(workspace_lists)
-        return jsonify(list_data[0])
+        return jsonify(list_data)
     
     # request is a POST
     elif request.method == 'POST':
@@ -679,9 +681,9 @@ def targetlists(workspace_id):
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         
-        schema = ListSchema(strict=True)
+        schema = ListSchema()
         list_data = schema.dump(new_list)
-        return jsonify(list_data[0]), 201
+        return jsonify(list_data), 201
 
 
 @app.route('/workspaces/<workspace_id>/lists/<list_id>', methods = ['GET', 'PUT', 'DELETE'])
@@ -702,13 +704,13 @@ def targetlist(workspace_id, list_id):
 
     # request is a GET
     if request.method == 'GET':
-        schema = ListSchema(strict=True)
+        schema = ListSchema()
         list_data = schema.dump(targetlist)
         return jsonify(list_data)
     # request is a DELETE
     elif request.method == 'DELETE':
         db.session.delete(targetlist)
-        update_workspace_ts(Workspace.query.filter_lby(id=workspace_id).first())
+        update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return '', 204
 
@@ -731,9 +733,9 @@ def targetlist(workspace_id, list_id):
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         
-        schema = ListSchema(strict=True)
+        schema = ListSchema()
         list_data = schema.dump(targetlist)
-        return jsonify(list_data[0]), 201
+        return jsonify(list_data), 201
 
 
 @app.route('/workspaces/<workspace_id>/lists/<list_id>/targets', methods=['POST', 'GET'])
@@ -754,7 +756,7 @@ def targets(workspace_id, list_id):
     # request is a GET
     if request.method == 'GET':
         targets = Person.query.filter_by(list_id=list_id)
-        schema = PersonSchema(many=True, strict=True)
+        schema = PersonSchema(many=True)
         all_targets = schema.dump(targets)
         return jsonify(all_targets)
 
@@ -808,9 +810,9 @@ def emails(workspace_id):
     # request is a GET
     if request.method == 'GET':
         all_emails = Email.query.filter_by(workspace_id=workspace_id).order_by(Email.updated_at.desc()).all()
-        schema = EmailSchema(many=True, strict=True)
+        schema = EmailSchema(many=True)
         email_data = schema.dump(all_emails)
-        return jsonify(email_data[0])
+        return jsonify(email_data)
 
     # request is a POST
     elif request.method == 'POST':
@@ -828,9 +830,9 @@ def emails(workspace_id):
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         
-        schema = EmailSchema(strict=True)
+        schema = EmailSchema()
         email_data = schema.dump(email)
-        return jsonify(email_data[0]), 200
+        return jsonify(email_data), 200
 
 
 @app.route('/workspaces/<workspace_id>/emails/<email_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -851,7 +853,7 @@ def email(workspace_id, email_id):
 
     #request is a GET
     if request.method == 'GET':
-        schema = EmailSchema(strict=True)
+        schema = EmailSchema()
         email_data = schema.dump(email)
         return jsonify(email_data)
 
@@ -915,9 +917,9 @@ def pages(workspace_id):
     # request is a GET
     if request.method == 'GET':
         all_pages = Page.query.filter_by(workspace_id=workspace_id).order_by(Page.updated_at.desc()).all()
-        schema = PageSchema(many=True, strict=True)
+        schema = PageSchema(many=True)
         page_data = schema.dump(all_pages)
-        return jsonify(page_data[0])
+        return jsonify(page_data)
 
     # request is a POST
     elif request.method == 'POST':
@@ -935,9 +937,9 @@ def pages(workspace_id):
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         
-        schema = PageSchema(strict=True)
+        schema = PageSchema()
         page_data = schema.dump(page)
-        return jsonify(page_data[0]), 201
+        return jsonify(page_data), 201
 
 
 @app.route('/workspaces/<workspace_id>/pages/<page_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -959,7 +961,7 @@ def page(workspace_id, page_id):
     #request is a GET
     if request.method == 'GET':
         page.find_form_fields()
-        schema = PageSchema(strict=True)
+        schema = PageSchema()
         page_data = schema.dump(page)
         return jsonify(page_data)
 
@@ -1006,12 +1008,12 @@ def campaigns(workspace_id):
         all_campaigns = Campaign.query.filter_by(workspace_id=workspace_id).order_by(Campaign.updated_at.desc()).all()
         
         # sort the pages associated with the campaign by index
-        for campaign in all_campaigns:
-            campaign.pages.sort(key=lambda camp: camp.index)
+        # for campaign in all_campaigns:
+        #     campaign.pages.sort(key=lambda camp: camp.index)
         
-        schema = CampaignSchema(many=True, strict=True)
+        schema = CampaignSchema(many=True)
         campaign_data = schema.dump(all_campaigns)
-        return jsonify(campaign_data[0])
+        return jsonify(campaign_data)
 
     # request is a POST
     elif request.method == 'POST':
@@ -1025,6 +1027,19 @@ def campaigns(workspace_id):
         port = request.form.get('Port')
         ssl = request.form.get('SSL')
         redirect_url = request.form.get('Redirect_URL')
+        start_time = request.form.get('Start_Time')
+        interval = request.form.get('Interval')
+        batch_size =request.form.get('Batch_Size')
+        payload_url = request.form.get('Payload_URL')
+        
+        print(start_time)
+        if start_time:
+            start_time = convert_to_datetime(start_time)
+        else:
+            start_time = datetime.now()
+        print(type(start_time))
+        print(start_time)
+
 
         ssl_bool = convert_to_bool(ssl)
         if type(ssl_bool) != bool:
@@ -1048,19 +1063,27 @@ def campaigns(workspace_id):
             return makeup
         
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
-            list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url)
-        
-        #for page in pages:
-            #print(campaign.id)
+                start_time=start_time, send_interval=interval, batch_size=batch_size, \
+                list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url, \
+                payload_url=payload_url)
 
         db.session.add(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         
         for idx, page in enumerate(pages):
+            print(page.name,idx)
+            #page_association = Campaignpages(index=idx)
+            #campaign.pages.append(page_association)
             page_association = Campaignpages(campaign_id=campaign.id, page_id=page.id, index=idx)
             db.session.add(page_association)
             db.session.commit()
+
+        schema = WorkerCampaignSchema()
+        campaign_data = schema.dump(campaign)
+    
+        campaign.prep_tracking(campaign.list.targets)
+        campaign.cast(campaign_data)
 
         return json.dumps({'success': True, 'id': campaign.id}), 200, {'ContentType':'application/json'}
 
@@ -1084,7 +1107,7 @@ def campaign(workspace_id, campaign_id):
 
     # request is a GET
     if request.method == 'GET':
-        schema = CampaignSchema(strict=True)
+        schema = CampaignSchema()
         campaign_data = schema.dump(campaign)
         return jsonify(campaign_data)
 
@@ -1150,7 +1173,7 @@ def cast(workspace_id, campaign_id):
     '''
     For GET requests, kick off the given campaign.
     '''
-
+    print('casting')
     if not validate_workspace(workspace_id):
         return json.dumps({'success': False, 'reasonCode': 1}), 200, {'ContentType':'application/json'}
 
@@ -1164,7 +1187,7 @@ def cast(workspace_id, campaign_id):
     if campaign.server.check_status() != 'Online':
         return json.dumps({'success': False, 'reasonCode': 4}), 200, {'ContentType':'application/json'}
 
-    schema = WorkerCampaignSchema(strict=True)
+    schema = WorkerCampaignSchema()
     campaign_data = schema.dump(campaign)
     
     campaign.prep_tracking()
@@ -1192,13 +1215,16 @@ def kill(workspace_id, campaign_id):
         return 'campaign is not active', 400
 
     if campaign.server.check_status() != 'Online':
-        campaign.status = 'Complete'
-        db.session.commit()
-        return 'could not stop campaign: %s. - campaign changed to completed' % campaign.server.status, 400
+        #campaign.status = 'Complete'
+        #db.session.commit()
+        return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
-    campaign.kill()
+    http_code = campaign.kill()
     
-    return 'campaign killed', 200
+    if http_code != 200:
+        return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+
+    return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/results')
@@ -1216,9 +1242,9 @@ def campaign_results(workspace_id, campaign_id):
     if campaign is None:
         return 'campaign does not exist', 404
 
-    schema = ResultSchema(many=True, strict=True)
+    schema = ResultSchema(many=True)
     results = schema.dump(campaign.results)
-    return jsonify(results[0])
+    return jsonify(results)
 
 
 @app.route('/workspaces/<workspace_id>/results')
@@ -1235,13 +1261,13 @@ def workspace_results(workspace_id):
     workspace_results = Result.query.join(Campaign).join(Workspace).filter(Workspace.id == workspace_id).all()
     campaigns = Campaign.query.filter_by(workspace_id=workspace_id).all()
 
-    schema = ResultCampaignSchema(many=True, strict=True)
+    schema = ResultCampaignSchema(many=True)
     c_results = schema.dump(campaigns)
 
-    schema = ResultSchema(many=True, strict=True)
+    schema = ResultSchema(many=True)
     results = schema.dump(workspace_results)
    
-    return jsonify(c_results[0], results[0])
+    return jsonify(c_results, results)
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/modules')
@@ -1284,7 +1310,7 @@ def active_campaigns():
     For GET requests, pull data on active campaigns
     '''
     active_campaigns = Campaign.query.filter_by(status='Active').order_by(Campaign.workspace_id).all()
-    schema = CampaignSchema(many=True, strict=True)
+    schema = CampaignSchema(many=True)
     campaign_data = schema.dump(active_campaigns)
     return jsonify(campaign_data)
 
@@ -1296,7 +1322,7 @@ def recent_workspaces():
     For GET requests, return recently used workspaces
     '''
     recent_workspaces = Workspace.query.order_by(Workspace.updated_at.desc()).limit(5).all()
-    schema = WorkspaceSchema(many=True, strict=True)
+    schema = WorkspaceSchema(many=True)
     workspaces = schema.dump(recent_workspaces)
     return jsonify(workspaces)
 
