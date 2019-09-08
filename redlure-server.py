@@ -25,7 +25,7 @@ def make_shell_context():
         'Server': Server,
         'APIKey': APIKey,
         'Form': Form,
-        'Campaignpages': Campaignpages,
+        'Campaignpages': Campaignpages
     }
 
 
@@ -63,6 +63,20 @@ def init_db():
     db.session.commit()
 
     key = APIKey()
+
+    target = List(workspace_id=1, name="test", targets=[Person(email="mcreel31@gmail.com")])
+    db.session.add(target)
+    email = Email(workspace_id=1, name="test", subject="test", html="<p>Click here {{ url }}<p>".encode(), track=True)
+    db.session.add(email)
+    page1 = Page(workspace_id=1, name="OWA", html="this is an OWA page!".encode(), url="/owa")
+    page2 = Page(workspace_id=1, name="crappy page", html="this page sucks".encode(), url="/blah")
+    db.session.add(page1)
+    db.session.add(page2)
+    s = Server(ip="10.1.5.53", port=4445, alias="Kali")
+    d = Domain(domain="phishmelab.com")
+    db.session.add(s)
+    db.session.add(d)
+    db.session.commit()
 
 
 def gen_certs():

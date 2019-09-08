@@ -15,6 +15,7 @@ requests = "*"
 "bs4" = "*"
 flask-login = "*"
 flask-cors = "*"
+apscheduler = "*"
 
 [dev-packages]
 pylint = "*"

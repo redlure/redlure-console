@@ -16,19 +16,14 @@ from binascii import hexlify
 import requests
 from bs4 import BeautifulSoup
 import json
+from apscheduler.schedulers.background import BackgroundScheduler
+import threading
 
 
 role_access = db.Table('role access',
     db.Column('role_id', db.Integer, db.ForeignKey('role.id'), primary_key=True),
     db.Column('workspace_id', db.Integer, db.ForeignKey('workspace.id'), primary_key=True)
 )
-
-'''
-campaign_pages = db.Table('campaign_pages',
-    db.Column('campaign_id', db.Integer, db.ForeignKey('campaign.id'), primary_key=True),
-    db.Column('page_id', db.Integer, db.ForeignKey('page.id'), primary_key=True)
-)
-'''
 
 # Workspace Classes
 class Workspace(db.Model):
@@ -61,7 +56,6 @@ class Role(db.Model):
     role_type = db.Column(db.String(64), nullable=False)
     workspaces = db.relationship('Workspace', secondary=role_access, lazy=True, backref=db.backref('roles', lazy=True))
     users = db.relationship('User', backref='role', lazy=True, cascade='all,delete')
-
 
     def __repr__(self):
         return '<Role {}>'.format(self.name)
@@ -123,14 +117,12 @@ class Profile(db.Model):
     tls = db.Column(db.Boolean, default=False, nullable=False)
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    campaigns = db.relationship('Campaign', backref='profile', lazy=True)
+    campaigns = db.relationship('Campaign', backref='profile', cascade='all, delete-orphan')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-
     def __repr__(self):
         return '<Sending Profile {}>'.format(self.name)
-
 
     def set_mail_configs(self):
         app.config['MAIL_SERVER'] = self.smtp_host
@@ -140,8 +132,11 @@ class Profile(db.Model):
         app.config['MAIL_USE_TLS'] = self.tls
         app.config['MAIL_USE_SSL'] = self.ssl
 
-    
     def send_test_mail(self, address):
+        """ 
+        Sends a test email to ensure everything is configured properly
+        @param address: str - recipient of the email
+        """
         self.set_mail_configs()
         mail = Mail(app)
         msg = Message('redlure test', sender=self.from_address, recipients=[address])
@@ -149,25 +144,115 @@ class Profile(db.Model):
         try:
             mail.send(msg)
             return True
-        except:
+        except Exception:
            return False
-        
     
-    def send_mail(self, email, targets, campaign_id, base_url):
+    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port):
+        """
+        Schedules a campaign to execute in a separate thread. The user decides when it will run, how many emails to send at a time, and how long to wait between batches.
+        @param email:
+        @param targets:
+        @param campaign_id: int - Unique identifier for the campaign to execute
+        @param base_url: 
+        @param interval: int - 
+        @param batch_size: int - Number of emails to send at once
+        @param start_time: datetime - Time in which to kickoff the campaign
+        """
+        # Configurations
+        self.set_mail_configs()
+        mail = Mail(app)
+        sched = BackgroundScheduler()
+        job_id = str(campaign_id)
+        targets = list(targets)
+
+        # Ensures that batch_size and interval are set
+        batch_size = len(targets) if not batch_size else batch_size
+        interval = 0 if not interval else interval
+
+        # Schedule the campaign and intialize it
+        current_jobs = sched.get_jobs()
+        # In case the batch size or interval are blank, set them appropriately 
+        if not batch_size: batch_size = len(targets)
+        if not interval: interval = 0
+
+        # Schedule the campaign and intialize it
         try:
-            self.set_mail_configs()
-            mail = Mail(app)
-            for target in targets:
-                msg = Message(subject=email.subject, sender=self.from_address, recipients=[target.email])
-                msg.html = email.prep_html(base_url, target)
-                mail.send(msg)
+            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port])
+        except Exception:
+            app.logger.exception(f'Error scheduling campaign {campaign_id}')
+        else:
+            app.logger.info(f'Campaign scheduled. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
+            sched.start()
+        
+        return
+
+    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, data, total_recipients, ip, port):
+        """
+        Sends emails to the targets in batches.  This function alwasy runs on a separate thread.
+        @param recipients: list - all remaining targets to send an email to for the specified campaign
+        @param email:
+        @param mail: Flask Mail Instance
+        @param base_url: 
+        @param job_id: int - Unique identifier for the scheduled job (it is identical to campaign_id)
+        @param batch_size: int - Number of emails to send at once
+        @param sched: Schedule Instance - this is necessary to kill of the job 
+        """
+        # At the start of the campaign, the worker must be put to work 
+        if len(recipients) == total_recipients:
+            app.logger.info('Attemping to set up worker for campaign')
+            # If the worker gives an issue, kill off the campaign and log the error
+            worker_response = self.start_worker(data, ip, port)
+            if worker_response != 200:
+                                
+                app.logger.error(f'Campaign failed to start becasue the worker gave a {worker_response} code')
                 
-                result = Result.query.filter_by(campaign_id=campaign_id, person_id=target.id).first()
+                #TODO: Make it so campaign is not marked as comlete when worker fails
+                sched.remove_job(job_id)
+                return
+            else:
+                app.logger.info('Campaign successfully started on worker')
+            
+        for _ in range(batch_size):
+            if recipients:
+                recipient = recipients.pop()
+                
+                msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
+                msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id)
+
+                # Since this function is in a different thread, it doesn't have the app's context by default
+                with app.app_context():
+                    try:
+                        mail.send(msg)
+                    except Exception:
+                        app.logger.exception(f'Error sending email to {recipient.email}')
+                    else:
+                        app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {job_id}')
+
+                # Updates email's status in database
+                result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
                 result.status = 'Sent'
                 db.session.commit()
-        except Exception as error:
-            print(error)
+            
+            # When all targets have been emailed, the job has to be explicitly removed
+            else:
+                sched.remove_job(job_id=job_id)
+                with app.app_context():
+                    app.logger.info(f'Campaign {job_id} completed')
+                return
 
+        return
+
+    @staticmethod
+    def start_worker(data, ip, port):
+        # tell worker to start hosting
+        params = {'key': APIKey.query.first().key}
+        r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
+        if r.status_code == 200:
+            return 200
+        if r.status_code == 400:
+            return 400
+        return 500
+    
 
 class ProfileSchema(Schema):
     id = fields.Number()
@@ -190,8 +275,7 @@ class Person(db.Model):
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
     list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    result = db.relationship('Result', backref='person', lazy=True, cascade='all,delete', uselist=False)
-
+    results = db.relationship('Result', backref='person', lazy=False, cascade='all,delete')
 
     def __repr__(self):
         return '<Person {}>'.format(self.email)
@@ -213,7 +297,6 @@ class List(db.Model):
     campaigns = db.relationship('Campaign', backref='list', lazy=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
 
     def __repr__(self):
         return '<Target List {}>'.format(self.name)
@@ -240,23 +323,33 @@ class Email(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-
     def __repr__(self):
         return '<Email {}>'.format(self.name)
 
-    
-    def prep_html(self, base_url, target):
+    def prep_html(self, base_url, target, campaign_id):
         '''
         Replace variables in the email HTML with proper values and insert the tracking image URL if needed.
         '''
-        # TODO; remove placeholder IP
-        base_url = 'http://10.1.2.180:8080/'
+        # get result for this target in this campaign
+        result = Result.query.filter_by(campaign_id=int(campaign_id), person_id=target.id).first()
+        # get if campaign is using SSL
+        ssl = result.campaign.ssl
+        # get port the worker will host on
+        port = result.campaign.port
+        # get the domain name the campaign is using
+        domain = result.campaign.domain.domain
+
+        if ssl:
+            base_url = f'https://{domain}:{port}'
+        else:
+            base_url = f'http://{domain}:{port}'
+
         html = self.html
-        html = html.replace(b'{{ fname }}', str.encode(target.first_name))
-        html = html.replace(b'{{ lname }}', str.encode(target.last_name))
-        html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
-        html = html.replace(b'{{ url }}', str.encode('%s' % target.result.tracker))
-        html = html.replace(b'{{ id }}', str.encode(target.result.tracker))
+        if target.first_name: html = html.replace(b'{{ fname }}', str.encode(target.first_name))
+        if target.last_name: html = html.replace(b'{{ lname }}', str.encode(target.last_name))
+        if target.first_name and target.last_name: html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
+        html = html.replace(b'{{ url }}', str.encode('%s/%s' % (base_url, result.tracker)))
+        html = html.replace(b'{{ id }}', str.encode(result.tracker))
         
         soup = BeautifulSoup(html, features='lxml')
         base = soup.new_tag('base', href=base_url)
@@ -264,7 +357,8 @@ class Email(db.Model):
         soup.insert(1, base)
 
         if self.track:
-            tracker = soup.new_tag('img', alt='', src='%s/pixel.png' % (target.result.tracker))
+            #TODO; remove placeholder IP
+            tracker = soup.new_tag('img', alt='', src=f'{base_url}/{result.tracker}/pixel.png')
             soup.find('body').insert_after(tracker)
         html = str(soup).encode()
 
@@ -290,6 +384,7 @@ class Page(db.Model):
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    campaigns = db.relationship('Campaignpages', backref='page', cascade='all, delete-orphan')
 
 
     def __repr__(self):
@@ -366,16 +461,14 @@ class FormSchema(Schema):
     result_id = fields.Number()
     data = fields.Dict()
 
-
     @post_dump
-    def serialize_form(self, data):
+    def serialize_form(self, data, **kwargs):
         '''
         Convert the submitted form data from type String back to Dict
         '''
         data['data'] = json.loads(data['data'])
         return data
     
-
 
 # Result Classes
 class Result(db.Model):
@@ -499,8 +592,8 @@ class Campaignpages(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
     page_id = db.Column(db.Integer, db.ForeignKey('page.id'), primary_key=True)
     index = db.Column(db.Integer)
-    page = db.relationship('Page', backref='campaigns', cascade='delete')
-    campaign = db.relationship('Campaign', backref='pages', cascade='delete', order_by='asc(Campaignpages.index)')
+    #page = db.relationship('Page', backref='campaigns')
+    #campaign = db.relationship('Campaign', backref='pages', lazy='joined', cascade='all, delete', order_by='asc(Campaignpages.index)')
 
 
 class CampaignpagesSchema(Schema):
@@ -513,22 +606,24 @@ class Campaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
-    #pages = db.relationship('Page', secondary=campaign_pages, lazy=True, backref=db.backref('campaigns', lazy=True))
-    #pages = db.relationship('Page', secondary='Campaignpages')
+    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=True)
     redirect_url = db.Column(db.String(64), nullable=True)
-    profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
-    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
-    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=True)
+    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=True)
+    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=True)
     port = db.Column(db.Integer, nullable=False)
     ssl = db.Column(db.Boolean, nullable=False)
     results = db.relationship('Result', backref='campaign', lazy=True, cascade='all,delete')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     status = db.Column(db.String(32), nullable=False)
-    #start_date = db.Column(db.DateTime)
-    #end_date = db.Column(db.DateTime)
+    start_time = db.Column(db.DateTime, nullable=True, default='')
+    #end_time = db.Column(db.DateTime, nullable=True, default='')
+    send_interval = db.Column(db.Integer, default=0)  # Number of minutes to wait between sending batch of emails
+    batch_size = db.Column(db.Integer)
+    payload_url = db.Column(db.String(64))
+    pages = db.relationship('Campaignpages', backref='campaign', cascade='all, delete-orphan')
     
 
     def __init__(self, **kwargs):
@@ -539,26 +634,26 @@ class Campaign(db.Model):
         return '<Campaign {}>'.format(self.name)
 
     
-    def prep_tracking(self):
-        for target in self.list.targets:
+    def prep_tracking(self, targets):
+        for target in targets:
             tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
-            result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
-            db.session.add(result)
-        db.session.commit()
+
+            # make sure the tracker is not a repeat
+            result = Result.query.filter_by(tracker=tracker).first()
+            
+            if result is None:
+                result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
+                db.session.add(result)
+                db.session.commit()
+            else:
+                self.prep_tracking(self,targets=[target])
 
 
     def cast(self, data):
-        # tell worker to start hosting
-        params = {'key': APIKey.query.first().key}
-        r = requests.post('https://%s:%d/campaigns/start' % (self.server.ip, self.server.port), json=data, params=params, verify=False)
-        if r.status_code == 400:
-            return json.dumps({'success': False, 'reasonCode': 5}), 200, {'ContentType':'application/json'}
-
-        # start sending emails
+        # schedule the campaign
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
-        self.profile.send_mail(self.email, self.list.targets, self.id, base_url)
+        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port)
         self.status = 'Active'
-        #self.start_date = datetime.utcnow
         db.session.commit()
 
 
@@ -566,9 +661,11 @@ class Campaign(db.Model):
         payload = {'id': self.id, 'port': self.port}
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
-        self.status = 'Complete'
-        #self.end_date = datetime.utcnow
-        db.session.commit()
+        if r.status_code == 200:
+            self.status = 'Complete'
+            #self.end_date = datetime.utcnow
+            db.session.commit()
+        return r.status_code
 
 
 class CampaignSchema(Schema):
@@ -587,8 +684,8 @@ class CampaignSchema(Schema):
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
     status = fields.Str()
-    #start_date = fields.DateTime()
-    #end_date = fields.DateTime()
+    payload_url = fields.Str()
+    start_time = fields.DateTime()
 
 
 class WorkerCampaignSchema(Schema):
@@ -600,10 +697,12 @@ class WorkerCampaignSchema(Schema):
     server = fields.Nested(ServerSchema, strict=True)
     port = fields.Number()
     ssl = fields.Boolean()
+    payload_url = fields.Str()
+
 
 class ResultCampaignSchema(Schema):
     id = fields.Number()
     name = fields.Str()
     status = fields.Str()
     server = fields.Nested(ServerSchema, strict=True)
-
+    start_time = fields.DateTime(format='%m-%d-%y')
