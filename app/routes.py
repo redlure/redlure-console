@@ -381,6 +381,22 @@ def server_status(server_id):
     return json.dumps({'status': status}), 200, {'ContentType':'application/json'} 
 
 
+@app.route('/servers/<server_id>/processes')
+@login_required
+@user_login_required
+def server_procs(server_id):
+    '''
+    For GET requests, query the server for ports already listening.
+    '''
+
+    server_obj = Server.query.filter_by(id=server_id).first()
+    if server_obj is None:
+        return 'server does not exist', 404
+
+    data = server_obj.check_processes()
+    return json.dumps(data.json()), 200, {'ContentType':'application/json'}
+
+
 @app.route('/workspaces/<workspace_id>/profiles', methods=['POST', 'GET'])
 @cross_origin(supports_credentials=True)
 @login_required
