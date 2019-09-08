@@ -420,7 +420,6 @@ class Server(db.Model):
         db.session.add(self)
         self.__dict__.update(kwargs)
         db.session.commit()
-        self.check_status()
         
 
     def check_status(self):
@@ -437,6 +436,14 @@ class Server(db.Model):
             self.status = 'Offline'
         db.session.commit()
         return self.status
+
+
+    def check_processes(self):
+        self.check_status()
+        if self.status == 'Online':
+            params = {'key': APIKey.query.first().key}
+            r = requests.get('https://%s:%d/processes/check' % (self.ip, self.port), params=params, verify=False)
+            return r
 
 
     def kill_process(self, port):
