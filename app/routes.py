@@ -125,6 +125,24 @@ def users():
         return jsonify(user_data[0]), 201
 
 
+@app.route('/users/<user_id>/reset', methods=['POST'])
+@login_required
+def reset_password(user_id):
+    '''
+    For POST requests, reset password of given user
+    '''
+    user = User.query.filter_by(id=user_id).first()
+    
+    if user is None:
+        return json.dumps({'success': False, 'message': 'User does not exist'}), 200, {'ContentType':'application/json'}
+
+    password = request.form.get('Password')
+    user.set_password(password)
+    
+    db.session.commit()
+    return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
+
+
 @app.route('/users/<user_id>', methods=['GET', 'DELETE'])
 @login_required
 @admin_login_required
