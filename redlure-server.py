@@ -5,6 +5,7 @@ import subprocess
 import os
 import shlex
 import shutil
+from config import Config
 
 # objects to initialize 'flask shell' with
 @app.shell_context_processor
@@ -90,9 +91,10 @@ if __name__ == '__main__':
         init_db()
 
     # generate certs if they dont exist
-    if not os.path.isfile('redlure-cert.pem') or not os.path.isfile('redlure-key.pem'):
-        gen_certs()
+    if Config.CERT_PATH == 'redlure-cert.pem' and Config.KEY_PATH == 'redlure-key.pem':
+        if not os.path.isfile('redlure-cert.pem') or not os.path.isfile('redlure-key.pem'):
+            gen_certs()
     
     # start the server
     #subprocess.Popen(['gunicorn', 'redlure-server:app', '-b 0.0.0.0:5000', '--certfile', 'redlure-cert.pem', '--keyfile', 'redlure-key.pem'])
-    app.run(host='0.0.0.0', ssl_context=('redlure-cert.pem','redlure-key.pem'))
+    app.run(host='0.0.0.0', ssl_context=(Config.CERT_PATH, Config.KEY_PATH))

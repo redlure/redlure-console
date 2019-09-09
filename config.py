@@ -5,4 +5,5 @@ class Config(object):
     SECRET_KEY = 'secret-key'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'redlure.db' + '?check_same_thread=False')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    #TESTING = True
+    CERT_PATH = 'redlure-cert.pem'
+    KEY_PATH = 'redlure-key.pem'
