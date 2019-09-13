@@ -12,10 +12,11 @@ flask-mail = "*"
 flask-script = "*"
 flask-user = "*"
 requests = "*"
-"bs4" = "*"
+bs4 = "*"
 flask-login = "*"
 flask-cors = "*"
 apscheduler = "*"
+lxml = "*"
 
 [dev-packages]
 pylint = "*"

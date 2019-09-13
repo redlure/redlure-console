@@ -52,7 +52,8 @@ def clone_link(link):
         else:
             return json.dumps({'success': False, 'message': 'Error collecting site source'}), 200, {'ContentType':'application/json'}
 
-    except:
+    except Exception as e:
+        print(e)
         return json.dumps({'success': False, 'message': 'Error collecting site source'}), 200, {'ContentType':'application/json'}
 
 

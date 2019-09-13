@@ -357,7 +357,6 @@ class Email(db.Model):
         soup.insert(1, base)
 
         if self.track:
-            #TODO; remove placeholder IP
             tracker = soup.new_tag('img', alt='', src=f'{base_url}/{result.tracker}/pixel.png')
             soup.find('body').insert_after(tracker)
         html = str(soup).encode()
@@ -435,10 +434,12 @@ class Domain(db.Model):
     def generate_cert(self, server):
         payload = {'domain': self.domain}
         params = {'key': APIKey.query.first().key}
-        try:
-            r = requests.post('https://%s:%d/certificates/generate' % (server.ip, server.port), params=params, data=payload, verify=False)
-        except:
-            pass
+        r = requests.post('https://%s:%d/certificates/generate' % (server.ip, server.port), params=params, data=payload, verify=False)
+        if r.json()['success']:
+            self.cert_path = r.json()['cert_path']
+            self.key_path = r.json()['key_path']
+            db.session.commit()
+        return r
 
 
 class DomainSchema(Schema):

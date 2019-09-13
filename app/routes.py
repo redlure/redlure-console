@@ -285,8 +285,8 @@ def generate_cert(domain_id):
     if server is None:
         return json.dumps({'success': False, 'msg': 'Failed to generate cert. The domain does not resolve to the IP of a redlure worker'}), 200, {'ContentType':'application/json'}
     
-    domain_obj.generate_cert(server)
-    return 'certs generated'
+    data = domain_obj.generate_cert(server)
+    return json.dumps(data.json()), 200, {'ContentType':'application/json'}
 
 
 
