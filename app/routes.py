@@ -62,7 +62,7 @@ def home():
 
 @app.route('/api')
 @login_required
-@admin_login_required
+@user_login_required
 def api():
     key = APIKey.query.first()
     
