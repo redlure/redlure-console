@@ -274,7 +274,7 @@ class Person(db.Model):
     first_name = db.Column(db.String(64))
     last_name = db.Column(db.String(64))
     email = db.Column(db.String(64), nullable=False)
-    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=False)
+    list_id = db.Column(db.Integer, db.ForeignKey('list.id'), nullable=True)
     results = db.relationship('Result', backref='person', lazy=False, cascade='all,delete')
 
     def __repr__(self):
@@ -292,7 +292,7 @@ class PersonSchema(Schema):
 class List(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
-    targets = db.relationship('Person', backref='list', lazy=True, cascade='all,delete, delete-orphan')
+    targets = db.relationship('Person', backref='list', lazy=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='list', lazy=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
