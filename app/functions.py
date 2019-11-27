@@ -76,23 +76,23 @@ def validate_campaign_makeup(email, pages, profile, targetlist, domain, server):
     Return a message and HTTP error code if a given campaign module does not exist.
     '''
     if email is None:
-        return 'email invalid', 404
+        return json.dumps({'success': False, 'msg': 'Selected email is invalid'}), 200, {'ContentType':'application/json'}
 
     for page in pages:
         if page is None:
-            return 'at least 1 page is invalid', 404
+            return json.dumps({'success': False, 'msg': 'At least 1 selected page is invalid'}), 200, {'ContentType':'application/json'}
     
     if profile is None:
-        return 'profile invalid', 404
+        return json.dumps({'success': False, 'msg': 'Selected profile is invalid'}), 200, {'ContentType':'application/json'}
 
     if targetlist is None:
-        return 'list invalid', 404
+        return json.dumps({'success': False, 'msg': 'Selected list is invalid'}), 200, {'ContentType':'application/json'}
 
     if domain is None:
-        return 'domain invalid', 404
+        return json.dumps({'success': False, 'msg': 'Selected domain is invalid'}), 200, {'ContentType':'application/json'}
 
     if server is None:
-        return 'server invalid', 404
+        return json.dumps({'success': False, 'msg': 'Selected server is invalid'}), 200, {'ContentType':'application/json'}
 
 
 def validate_workspace(workspace_id):

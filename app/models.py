@@ -514,7 +514,7 @@ class Server(db.Model):
         db.session.add(self)
         self.__dict__.update(kwargs)
         db.session.commit()
-        
+
 
     def check_status(self):
         params = {'key': APIKey.query.first().key}
@@ -550,6 +550,39 @@ class Server(db.Model):
                 return 'process killed'
             else:
                 return 'error killing process'
+
+
+    def check_certs(self, cert_path, key_path):
+        params = {'key': APIKey.query.first().key}
+        payload = {'cert_path': cert_path, 'key_path': key_path}
+        r = requests.post('https://%s:%s/certificates/check' % (self.ip, self.port), params=params, data=payload, verify=False)
+        return r
+
+
+    def list_files(self):
+        params = {'key': APIKey.query.first().key}
+        r = requests.get('https://%s:%d/files' % (self.ip, self.port), params=params, verify=False)
+        return r
+
+
+    def upload_file(self, files):
+        params = {'key': APIKey.query.first().key}
+        payload = {'Filename': files['file'].filename}
+        r = requests.post('https://%s:%d/files' % (self.ip, self.port), params=params, files=files, data=payload, verify=False)
+        return r
+
+
+    def delete_file(self, filename):
+        params = {'key': APIKey.query.first().key}
+        payload = {'Filename': filename}
+        r = requests.post('https://%s:%d/files/delete' % (self.ip, self.port), params=params, data=payload, verify=False)
+        return r
+
+
+    def delete_allfiles(self):
+        params = {'key': APIKey.query.first().key}
+        r = requests.get('https://%s:%d/files/delete' % (self.ip, self.port), params=params, verify=False)
+        return r
 
 
     def __repr__(self):

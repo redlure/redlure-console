@@ -25,7 +25,7 @@ def login():
     if username is not None:
         user = User.query.filter_by(username=username).first()
         if user is None or not user.check_password(request.form.get('Password')):
-            return json.dumps({'success': False}), 401, {'ContentType':'application/json'} 
+            return json.dumps({'success': False}), 200, {'ContentType':'application/json'} 
 
         login_user(user)
         '''
@@ -36,7 +36,7 @@ def login():
         #return redirect(next_page)
         '''
         return json.dumps({'success': True}), 200, {'ContentType':'application/json'} 
-    return json.dumps({'success': False}), 401, {'ContentType':'application/json'} 
+    return json.dumps({'success': False}), 200, {'ContentType':'application/json'} 
 
 
 @app.route('/logout')
@@ -265,7 +265,10 @@ def domain(domain_id):
         domain_obj.key_path = key_path
         domain_obj.update_ip()
         db.session.commit()
-        return 'domain updated'
+
+        schema = DomainSchema()
+        domain_data = schema.dump(domain_obj)
+        return jsonify(domain_data), 200
 
 
 @app.route('/domains/<domain_id>/certificates/generate')
@@ -395,6 +398,47 @@ def server_procs(server_id):
         return 'server does not exist', 404
 
     data = server_obj.check_processes()
+    return json.dumps(data.json()), 200, {'ContentType':'application/json'}
+
+
+@app.route('/servers/<server_id>/files', methods=['GET', 'POST'])
+@login_required
+@user_login_required
+def server_file_upload(server_id):
+    '''
+    For GET requests, list all files on the server.
+    For POST requests, upload a new file to the server
+    '''
+
+    server_obj = Server.query.filter_by(id=server_id).first()
+    if server_obj is None:
+        return 'server does not exist', 404
+
+    if request.method == 'GET':
+        data = server_obj.list_files()
+        return json.dumps(data.json()), 200, {'ContentType':'application/json'}
+    elif request.method == 'POST':
+        data = server_obj.upload_file(request.files)
+        return json.dumps(data.json()), 200, {'ContentType':'application/json'}
+
+
+@app.route('/servers/<server_id>/files/delete', methods=['GET', 'POST'])
+@login_required
+@user_login_required
+def server_file_delete(server_id):
+    '''
+    For GET requests delete all uploads off the server
+    For POST requests delete a specified file off the server
+    '''
+    server_obj = Server.query.filter_by(id=server_id).first()
+    if server_obj is None:
+        return 'server does not exist', 404
+
+    if request.method == 'GET':
+       data = server_obj.delete_allfiles()
+    elif request.method == 'POST':
+        filename = request.form.get('Filename')
+        data = server_obj.delete_file(filename)
     return json.dumps(data.json()), 200, {'ContentType':'application/json'}
 
 
@@ -1082,12 +1126,12 @@ def campaigns(workspace_id):
         pages = []
 
         for page_name in page_names:
-            page = Page.query.with_entities(Page).filter((Page.name == page_name) & ((Page.workspace_id == 2) | (Page.workspace_id == 1))).first()
+            page = Page.query.with_entities(Page).filter((Page.name == page_name) & ((Page.workspace_id == workspace_id) | (Page.workspace_id == 1))).first()
             pages.append(page)
 
-        email = Email.query.with_entities(Email).filter((Email.name == email_name) & ((Email.workspace_id == 2) | (Email.workspace_id == 1))).first()
-        profile = Profile.query.with_entities(Profile).filter((Profile.name == profile_name) & ((Profile.workspace_id == 2) | (Profile.workspace_id == 1))).first()
-        targetlist = List.query.with_entities(List).filter((List.name == list_name) & ((List.workspace_id == 2) | (List.workspace_id == 1))).first()
+        email = Email.query.with_entities(Email).filter((Email.name == email_name) & ((Email.workspace_id == workspace_id) | (Email.workspace_id == 1))).first()
+        profile = Profile.query.with_entities(Profile).filter((Profile.name == profile_name) & ((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1))).first()
+        targetlist = List.query.with_entities(List).filter((List.name == list_name) & ((List.workspace_id == workspace_id) | (List.workspace_id == 1))).first()
         domain = Domain.query.filter_by(domain=domain_name).first()
         server = Server.query.filter_by(alias=server_alias).first()
 
@@ -1119,7 +1163,10 @@ def campaigns(workspace_id):
         campaign.prep_tracking(campaign.list.targets)
         campaign.cast(campaign_data)
 
-        return json.dumps({'success': True, 'id': campaign.id}), 200, {'ContentType':'application/json'}
+        schema = CampaignSchema()
+        data = schema.dump(campaign)
+
+        return json.dumps({'success': True, 'campaign': data}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>', methods=['GET', 'DELETE', 'PUT'])
@@ -1198,6 +1245,51 @@ def campaign(workspace_id, campaign_id):
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
         return 'campaign updated'
+
+
+@app.route('/workspaces/<workspace_id>/campaigns/validateips', methods=['POST'])
+@login_required
+@user_login_required
+def validate_ips(workspace_id):
+    '''
+    For POST requests, validate that the IP address of a given server and domain match
+    '''
+    domain = request.form.get('Domain')
+    alias = request.form.get('Server')
+
+    domain_obj = Domain.query.filter_by(domain=domain).first()
+    if domain_obj is None:
+        return 'domain does not exist', 404
+
+    server = Server.query.filter_by(alias=alias).first()
+    if server is None:
+        return 'server does not exist', 404
+
+    if server.ip != domain_obj.ip:
+        return json.dumps({'success': False, 'msg': 'Chosen domain does not resolve to the IP address of the chosen server'}), 200, {'ContentType':'application/json'}
+    return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
+
+
+@app.route('/workspaces/<workspace_id>/campaigns/validatecerts', methods=['POST'])
+@login_required
+@user_login_required
+def validate_certs(workspace_id):
+    '''
+    For POST requests, check that the provided domain has certs on the provided server
+    '''
+    domain = request.form.get('Domain')
+    alias = request.form.get('Server')
+
+    domain_obj = Domain.query.filter_by(domain=domain).first()
+    if domain_obj is None:
+        return 'domain does not exist', 404
+
+    server = Server.query.filter_by(alias=alias).first()
+    if server is None:
+        return 'server does not exist', 404
+
+    data = server.check_certs(domain_obj.cert_path, domain_obj.key_path)
+    return json.dumps(data.json()), 200, {'ContentType':'application/json'}
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/cast', methods=['GET'])
@@ -1321,7 +1413,7 @@ def campaign_modules(workspace_id):
     email_names = Email.query.with_entities(Email.name).filter((Email.workspace_id == workspace_id) | (Email.workspace_id == 1)).all()
     profile_names = Profile.query.with_entities(Profile.name).filter((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1)).all()
     domain_names = Domain.query.with_entities(Domain.domain).all()
-    server_names = Server.query.with_entities(Server.alias).all()
+    server_names = Server.query.with_entities(Server.id, Server.alias).all()
 
     all_info = {
         "pages": [item for sublist in page_names for item in sublist], # make list of lists a flat list
@@ -1329,7 +1421,7 @@ def campaign_modules(workspace_id):
         "emails": [item for sublist in email_names for item in sublist],
         "profiles": [item for sublist in profile_names for item in sublist],
         "domains": [item for sublist in domain_names for item in sublist],
-        "servers": [item for sublist in server_names for item in sublist],
+        "servers": [dict(zip(['id','alias'],s)) for s in server_names] #[item for sublist in server_names for item in sublist],
     }
 
     return jsonify(all_info), 200
