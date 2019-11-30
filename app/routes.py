@@ -7,7 +7,7 @@ from flask_mail import Mail, Message
 from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts, convert_to_datetime
 import json
 import subprocess
-from flask_cors import cross_origin  
+from flask_cors import cross_origin
 from datetime import datetime
 
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 from app import app, db
-from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form, Campaignpages
+from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form, Campaignpages, WorkerCampaignSchema
 import subprocess
 import os
 import shlex
 import shutil
 from config import Config
+from datetime import datetime
 
 # objects to initialize 'flask shell' with
 @app.shell_context_processor
@@ -45,14 +46,14 @@ def init_db():
     db.session.add(general_ws)
     db.session.commit()
 
-
     administrator = Role(name='Defualt Administrator', role_type='Administrator')
-    user = Role(name='Defualt User', role_type='User') 
+    user = Role(name='Defualt User', role_type='User')
     client = Role(name='Defualt Client', role_type='Client')
     general_ws = Workspace.query.filter_by(id=1, name='General').first()
     if general_ws is not None:
-            administrator.workspaces.append(general_ws)
-            user.workspaces.append(general_ws)
+        administrator.workspaces.append(general_ws)
+        user.workspaces.append(general_ws)
+
     db.session.add(administrator)
     db.session.add(user)
     db.session.add(client)
@@ -79,6 +80,18 @@ def init_db():
     db.session.add(d)
     db.session.commit()
 
+# check for scheduled campaigns that need to be rentered into the queue
+def check_campaigns():
+    campaigns = Campaign.query.filter_by(status='Scheduled').all()
+    for campaign in campaigns:
+        if datetime.now() < campaign.start_time:
+            schema = WorkerCampaignSchema()
+            campaign_data = schema.dump(campaign)
+            campaign.cast(campaign_data)
+
+        else:
+            campaign.status = 'Start time missed (server outage)'
+            db.session.commit()
 
 def gen_certs():
     proc = subprocess.Popen(shlex.split('openssl req -x509 -newkey rsa:4096 -nodes -subj "/" -out redlure-cert.pem -keyout redlure-key.pem -days 365'))
@@ -89,12 +102,14 @@ if __name__ == '__main__':
     # check if db exists yet
     if not os.path.isfile('redlure.db'):
         init_db()
+    else:
+        check_campaigns()
 
     # generate certs if they dont exist
     if Config.CERT_PATH == 'redlure-cert.pem' and Config.KEY_PATH == 'redlure-key.pem':
         if not os.path.isfile('redlure-cert.pem') or not os.path.isfile('redlure-key.pem'):
             gen_certs()
-    
+
     # start the server
     #subprocess.Popen(['gunicorn', 'redlure-server:app', '-b 0.0.0.0:5000', '--certfile', 'redlure-cert.pem', '--keyfile', 'redlure-key.pem'])
     app.run(host='0.0.0.0', ssl_context=(Config.CERT_PATH, Config.KEY_PATH))

@@ -166,8 +166,8 @@ class Profile(db.Model):
         targets = list(targets)
 
         # Ensures that batch_size and interval are set
-        batch_size = len(targets) if not batch_size else batch_size
-        interval = 0 if not interval else interval
+        #batch_size = len(targets) if not batch_size else batch_size
+        #interval = 0 if not interval else interval
 
         # Schedule the campaign and intialize it
         current_jobs = sched.get_jobs()
@@ -211,6 +211,9 @@ class Profile(db.Model):
                 return
             else:
                 app.logger.info('Campaign successfully started on worker')
+                campaign = Campaign.query.filter_by(id=job_id).first()
+                campaign.status = 'Active'
+                db.session.commit()
             
         for _ in range(batch_size):
             if recipients:
@@ -236,8 +239,8 @@ class Profile(db.Model):
             # When all targets have been emailed, the job has to be explicitly removed
             else:
                 sched.remove_job(job_id=job_id)
-                with app.app_context():
-                    app.logger.info(f'Campaign {job_id} completed')
+                #with app.app_context():
+                app.logger.info(f'Campaign {job_id} completed')
                 return
 
         return
@@ -687,7 +690,7 @@ class Campaign(db.Model):
         # schedule the campaign
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
         self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port)
-        self.status = 'Active'
+        self.status = 'Scheduled'
         db.session.commit()
 
 
