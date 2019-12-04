@@ -660,8 +660,9 @@ class Campaign(db.Model):
     send_interval = db.Column(db.Integer, default=0)  # Number of minutes to wait between sending batch of emails
     batch_size = db.Column(db.Integer)
     payload_url = db.Column(db.String(64))
+    payload_file = db.Column(db.String(64))
     pages = db.relationship('Campaignpages', backref='campaign', cascade='all, delete-orphan')
-    
+
 
     def __init__(self, **kwargs):
         self.status = 'Inactive'
@@ -723,6 +724,7 @@ class CampaignSchema(Schema):
     status = fields.Str()
     payload_url = fields.Str()
     start_time = fields.DateTime()
+    payload_file = fields.Str()
 
 
 class WorkerCampaignSchema(Schema):
@@ -735,6 +737,7 @@ class WorkerCampaignSchema(Schema):
     port = fields.Number()
     ssl = fields.Boolean()
     payload_url = fields.Str()
+    payload_file = fields.Str()
 
 
 class ResultCampaignSchema(Schema):
