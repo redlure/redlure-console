@@ -203,9 +203,9 @@ class Profile(db.Model):
             # If the worker gives an issue, kill off the campaign and log the error
             worker_response = self.start_worker(data, ip, port)
             if worker_response != 200:
-                                
+
                 app.logger.error(f'Campaign failed to start becasue the worker gave a {worker_response} code')
-                
+
                 #TODO: Make it so campaign is not marked as comlete when worker fails
                 sched.remove_job(job_id)
                 return
@@ -214,11 +214,11 @@ class Profile(db.Model):
                 campaign = Campaign.query.filter_by(id=job_id).first()
                 campaign.status = 'Active'
                 db.session.commit()
-            
+
         for _ in range(batch_size):
             if recipients:
                 recipient = recipients.pop()
-                
+
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
                 msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id)
 
@@ -342,10 +342,14 @@ class Email(db.Model):
         # get the domain name the campaign is using
         domain = result.campaign.domain.domain
 
+        payload_url_path = result.campaign.payload_url
+
         if ssl:
             base_url = f'https://{domain}:{port}'
+            payload_url = f'https://{domain}:{port}{payload_url_path}?id={result.tracker}'
         else:
             base_url = f'http://{domain}:{port}'
+            payload_url = f'http://{domain}:{port}{payload_url_path}?id={result.tracker}'
 
         html = self.html
         if target.first_name: html = html.replace(b'{{ fname }}', str.encode(target.first_name))
@@ -353,7 +357,8 @@ class Email(db.Model):
         if target.first_name and target.last_name: html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
         html = html.replace(b'{{ url }}', str.encode('%s/%s' % (base_url, result.tracker)))
         html = html.replace(b'{{ id }}', str.encode(result.tracker))
-        
+        html = html.replace(b'{{ payload_url }}', str.encode(payload_url))
+
         soup = BeautifulSoup(html, features='lxml')
         base = soup.new_tag('base', href=base_url)
         #soup.find('head').insert_before(base)
@@ -745,4 +750,5 @@ class ResultCampaignSchema(Schema):
     name = fields.Str()
     status = fields.Str()
     server = fields.Nested(ServerSchema, strict=True)
+    domain = fields.Nested(DomainSchema, strict=True)
     start_time = fields.DateTime(format='%m-%d-%y')

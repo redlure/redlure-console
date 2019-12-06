@@ -1465,14 +1465,17 @@ def record_action():
     '''
     tracker = request.form.get('tracker')
     action = request.form.get('action')
-    
+
     result = Result.query.filter_by(tracker=tracker).first()
-    
+
     # tracker string is not in db
     if result is None:
         return 'no tracker', 404
 
-    if action == 'Clicked' and result.status != 'Submitted':
+    if action == 'Downloaded' and result.status not in ['Submitted']:
+        result.status = action
+        print(action)
+    elif action == 'Clicked' and result.status not in ['Submitted', 'Downloaded']:
         result.status = action
     elif action == 'Opened' and result not in ['Clicked', 'Submitted']:
         result.status = action
