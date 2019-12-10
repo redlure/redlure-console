@@ -239,6 +239,7 @@ def domain(domain_id):
     # request is a GET
     if request.method == 'GET':
         domain_obj.update_ip()
+        db.session.commit()
         schema = DomainSchema()
         domain_data = schema.dump(domain_obj)
         return jsonify(domain_data)

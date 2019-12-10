@@ -17,6 +17,7 @@ flask-login = "*"
 flask-cors = "*"
 apscheduler = "*"
 lxml = "*"
+html2text = "*"
 
 [dev-packages]
 pylint = "*"

@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 import json
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
+import html2text
 
 
 role_access = db.Table('role access',
@@ -133,7 +134,7 @@ class Profile(db.Model):
         app.config['MAIL_USE_SSL'] = self.ssl
 
     def send_test_mail(self, address):
-        """ 
+        """
         Sends a test email to ensure everything is configured properly
         @param address: str - recipient of the email
         """
@@ -141,6 +142,7 @@ class Profile(db.Model):
         mail = Mail(app)
         msg = Message('redlure test', sender=self.from_address, recipients=[address])
         msg.html = "<text>This a test email sent from your redlure profile using Flask Mail</text>"
+        msg.body = html2text.html2text(msg.html)
         try:
             mail.send(msg)
             return True
@@ -221,6 +223,7 @@ class Profile(db.Model):
 
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
                 msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id)
+                msg.body = html2text.html2text(msg.html)
 
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
