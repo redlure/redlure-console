@@ -223,7 +223,7 @@ class Profile(db.Model):
 
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
                 msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id)
-                msg.body = html2text.html2text(msg.html)
+                msg.body = html2text.html2text(msg.html.decode())
 
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
