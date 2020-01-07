@@ -34,13 +34,17 @@ def make_shell_context():
 def init_db():
     if os.path.isdir('migrations'):
         shutil.rmtree('migrations')
+
+    print('\n[*] Creating database\n')
+
     proc = subprocess.Popen(shlex.split('flask db init'))
     proc.wait()
     proc = subprocess.Popen(shlex.split('flask db migrate'))
     proc.wait()
     proc = subprocess.Popen(shlex.split('flask db upgrade'))
     proc.wait()
-    print('Initializing database')
+
+    print('\n[*] Initializing database values\n')
 
     general_ws = Workspace(name='General')
     db.session.add(general_ws)
@@ -66,20 +70,6 @@ def init_db():
 
     key = APIKey()
 
-    target = List(workspace_id=1, name="test", targets=[Person(email="mcreel31@gmail.com")])
-    db.session.add(target)
-    email = Email(workspace_id=1, name="test", subject="test", html="<p>Click here {{ url }}<p>".encode(), track=True)
-    db.session.add(email)
-    page1 = Page(workspace_id=1, name="OWA", html="this is an OWA page!".encode(), url="/owa")
-    page2 = Page(workspace_id=1, name="crappy page", html="this page sucks".encode(), url="/blah")
-    db.session.add(page1)
-    db.session.add(page2)
-    s = Server(ip="10.1.5.53", port=4445, alias="Kali")
-    d = Domain(domain="phishmelab.com")
-    db.session.add(s)
-    db.session.add(d)
-    db.session.commit()
-
 # check for scheduled campaigns that need to be rentered into the queue
 def check_campaigns():
     campaigns = Campaign.query.filter_by(status='Scheduled').all()
@@ -99,6 +89,12 @@ def gen_certs():
 
 
 if __name__ == '__main__':
+    # SECRET_KEY is required
+    if Config.SECRET_KEY == '':
+        print('\n[!] A secret key is required - set the SECRET_KEY attribute in config.py')
+        print(f'[!] New random secret key: {os.urandom(24)}')
+        exit()
+
     # check if db exists yet
     if not os.path.isfile('redlure.db'):
         init_db()
