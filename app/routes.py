@@ -1473,15 +1473,18 @@ def record_action():
     if result is None:
         return 'no tracker', 404
 
-    if action == 'Downloaded' and result.status not in ['Submitted']:
-        result.status = action
-        print(action)
-    elif action == 'Clicked' and result.status not in ['Submitted', 'Downloaded']:
-        result.status = action
-    elif action == 'Opened' and result not in ['Clicked', 'Submitted']:
-        result.status = action
-
-    db.session.commit()
+    # update result status in the database
+    if result.status != 'Submitted':
+        if action == 'Downloaded':
+            result.status = action
+            db.session.commit()
+        elif action == 'Clicked' and result.status != 'Downloaded':
+            result.status = action
+            db.session.commit()
+        elif action == 'Opened' and result.status not in ['Clicked', 'Downloaded']:
+            result.status = action
+            db.session.commit()
+            
     return 'updated'
 
 
