@@ -166,7 +166,7 @@ class Profile(db.Model):
         sched = BackgroundScheduler()
         job_id = str(campaign_id)
         targets = list(targets)
-
+        
         # Ensures that batch_size and interval are set
         #batch_size = len(targets) if not batch_size else batch_size
         #interval = 0 if not interval else interval
@@ -176,14 +176,16 @@ class Profile(db.Model):
         # In case the batch size or interval are blank, set them appropriately 
         if not batch_size: batch_size = len(targets)
         if not interval: interval = 0
+        
+        campaign = Campaign.query.filter_by(id=campaign_id).first()
 
         # Schedule the campaign and intialize it
         try:
             sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port])
         except Exception:
-            app.logger.exception(f'Error scheduling campaign {campaign_id}')
+            app.logger.exception(f'Error scheduling campaign {campaign.name} (ID: {campaign_id})')
         else:
-            app.logger.info(f'Campaign scheduled. Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes starting at {start_time}')
+            app.logger.info(f'Scheduled campaign {campaign.name} (ID: {campaign_id}) to start at {start_time} - Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes')
             sched.start()
         
         return
@@ -199,21 +201,20 @@ class Profile(db.Model):
         @param batch_size: int - Number of emails to send at once
         @param sched: Schedule Instance - this is necessary to kill of the job 
         """
-        # At the start of the campaign, the worker must be put to work 
+
+        # Before sending emails, ensure the web server starts on the worker
+        campaign = Campaign.query.filter_by(id=job_id).first() 
         if len(recipients) == total_recipients:
-            app.logger.info('Attemping to set up worker for campaign')
             # If the worker gives an issue, kill off the campaign and log the error
             worker_response = self.start_worker(data, ip, port)
+            
             if worker_response != 200:
-
-                app.logger.error(f'Campaign failed to start becasue the worker gave a {worker_response} code')
-
-                #TODO: Make it so campaign is not marked as comlete when worker fails
-                sched.remove_job(job_id)
+                app.logger.error(f'Failed to start campaign {campaign.name} (ID: {campaign.id}) - Worker web server failed to start on server {campaign.server.alias} (IP: {campaign.server.ip})')
+                sched.remove_job(job_id) 
+                campaign.status = 'Failed to start'
                 return
             else:
-                app.logger.info('Campaign successfully started on worker')
-                campaign = Campaign.query.filter_by(id=job_id).first()
+                app.logger.info(f'Campaign {campaign.name} (ID: {campaign.id}) successfully started web server on {campaign.server.alias} (IP: {campaign.server.ip})')
                 campaign.status = 'Active'
                 db.session.commit()
 
@@ -230,9 +231,9 @@ class Profile(db.Model):
                     try:
                         mail.send(msg)
                     except Exception:
-                        app.logger.exception(f'Error sending email to {recipient.email}')
+                        app.logger.exception(f'Error sending email to {recipient.email} for {campaign.name} (ID: {campaign.id})')
                     else:
-                        app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {job_id}')
+                        app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {campaign.name} (ID: {campaign.id})')
 
                 # Updates email's status in database
                 result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
@@ -243,7 +244,7 @@ class Profile(db.Model):
             else:
                 sched.remove_job(job_id=job_id)
                 #with app.app_context():
-                app.logger.info(f'Campaign {job_id} completed')
+                app.logger.info(f'Finished sending emails for campaign {campaign.name} (ID: {campaign.id})')
                 return
 
         return
@@ -364,7 +365,6 @@ class Email(db.Model):
 
         soup = BeautifulSoup(html, features='lxml')
         base = soup.new_tag('base', href=base_url)
-        #soup.find('head').insert_before(base)
         soup.insert(1, base)
 
         if self.track:
@@ -624,6 +624,7 @@ class APIKey(db.Model):
 
     
     def generate_key(self):
+        app.logger.info('New API key generated')
         self.key = hexlify(os.urandom(24)).decode()
         db.session.commit()
 
