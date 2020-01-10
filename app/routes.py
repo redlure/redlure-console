@@ -23,10 +23,10 @@ def login():
     if username is not None:
         user = User.query.filter_by(username=username).first()
         if user is None:
-            app.logger.warning(f'Failed login attempt for user {username} - Invalid username - Client IP address: {client_ip}')
+            app.logger.warning(f'Failed login attempt for user {username} - Invalid username - Client IP address: {request.remote_addr}')
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
         if not user.check_password(request.form.get('Password')):
-            app.logger.warning(f'Failed login attempt for user {username} - Invalid password - Client IP address: {client_ip}')
+            app.logger.warning(f'Failed login attempt for user {username} - Invalid password - Client IP address: {request.remote_addr}')
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         login_user(user)
@@ -53,16 +53,6 @@ def logout():
     app.logger.info(f'Successful logout for user {current_user.username} - Client IP address {request.remote_addr}')
     logout_user()
     return redirect(url_for('login'))
-
-
-@app.route('/home')
-@login_required
-@user_login_required
-def home():
-    '''
-    home page.
-    '''
-    return 'home'
 
 
 @app.route('/api')
@@ -178,6 +168,19 @@ def user(user_id):
         db.session.commit()
         app.logger.info(f'Deleted user {user.username} - Deleted by {current_user.username} - Client IP address {request.remote_addr}')
         return json.dumps({'success': True}), 200, {'ContentType':'application/json'} 
+
+
+@app.route('/users/current')
+@cross_origin(supports_credentials=True)
+@login_required
+def currentUser():
+    '''
+    For GET requests, return the current user
+    '''
+    schema = UserSchema()
+    user_data = schema.dump(current_user)
+    return jsonify(user_data)
+
 
 
 @app.route('/domains', methods=['GET', 'POST'])
