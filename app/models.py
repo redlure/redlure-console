@@ -530,7 +530,7 @@ class Server(db.Model):
     def check_status(self):
         params = {'key': APIKey.query.first().key}
         try:
-            r = requests.get('https://%s:%d/status' % (self.ip, self.port), params=params, verify=False, timeout=5)
+            r = requests.post('https://%s:%d/status' % (self.ip, self.port), params=params, verify=False, timeout=5)
             if r.status_code == 200:
                 self.status = 'Online'
             elif r.status_code == 401:
@@ -547,7 +547,7 @@ class Server(db.Model):
         self.check_status()
         if self.status == 'Online':
             params = {'key': APIKey.query.first().key}
-            r = requests.get('https://%s:%d/processes/check' % (self.ip, self.port), params=params, verify=False)
+            r = requests.post('https://%s:%d/processes/check' % (self.ip, self.port), params=params, verify=False)
             return r
 
 
@@ -556,7 +556,7 @@ class Server(db.Model):
         if self.status == 'Online':
             params = {'key': APIKey.query.first().key}
             payload = {'port': port}
-            r = requests.get('https://%s:%d/processes/kill' % (self.ip, self.port), params=params, data=payload, verify=False)
+            r = requests.post('https://%s:%d/processes/kill' % (self.ip, self.port), params=params, data=payload, verify=False)
             if r.status_code == 200:
                 return 'process killed'
             else:
@@ -572,14 +572,14 @@ class Server(db.Model):
 
     def list_files(self):
         params = {'key': APIKey.query.first().key}
-        r = requests.get('https://%s:%d/files' % (self.ip, self.port), params=params, verify=False)
+        r = requests.post('https://%s:%d/files' % (self.ip, self.port), params=params, verify=False)
         return r
 
 
     def upload_file(self, files):
         params = {'key': APIKey.query.first().key}
         payload = {'Filename': files['file'].filename}
-        r = requests.post('https://%s:%d/files' % (self.ip, self.port), params=params, files=files, data=payload, verify=False)
+        r = requests.post('https://%s:%d/files/upload' % (self.ip, self.port), params=params, files=files, data=payload, verify=False)
         return r
 
 
@@ -592,7 +592,7 @@ class Server(db.Model):
 
     def delete_allfiles(self):
         params = {'key': APIKey.query.first().key}
-        r = requests.get('https://%s:%d/files/delete' % (self.ip, self.port), params=params, verify=False)
+        r = requests.post('https://%s:%d/files/deleteall' % (self.ip, self.port), params=params, verify=False)
         return r
 
 
