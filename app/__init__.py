@@ -38,4 +38,3 @@ if True:
     # Add the handler and set the required level
     app.logger.addHandler(file_handler)
     app.logger.setLevel(logging.DEBUG)
-    app.logger.info('redlure-server startup')

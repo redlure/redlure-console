@@ -1,7 +1,8 @@
 from app import app, db, login
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
-from marshmallow import Schema, fields, post_dump, pre_dump
+from marshmallow import Schema, fields, post_dump
+from app.cipher import decrypt
 from flask_mail import Mail, Message
 from app import app
 from flask import jsonify
@@ -19,6 +20,12 @@ import json
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 import html2text
+
+
+# table to hold 1 encrypted value to test if cipher passphrase is correct
+class CipherTest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    value = db.Column(db.String(64))
 
 
 role_access = db.Table('role access',
@@ -113,8 +120,8 @@ class Profile(db.Model):
     from_address = db.Column(db.String(64), nullable=False)
     smtp_host = db.Column(db.String(64), nullable=False)
     smtp_port = db.Column(db.Integer, nullable=False)
-    username = db.Column(db.String(64), nullable=False)
-    password = db.Column(db.String(64), nullable=False)
+    username = db.Column(db.String(128), nullable=False)
+    password = db.Column(db.String(128), nullable=False)
     tls = db.Column(db.Boolean, default=False, nullable=False)
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
@@ -126,12 +133,15 @@ class Profile(db.Model):
         return '<Sending Profile {}>'.format(self.name)
 
     def set_mail_configs(self):
+        print(type(self.username))
+        print(type(self.password))
         app.config['MAIL_SERVER'] = self.smtp_host
         app.config['MAIL_PORT'] = self.smtp_port
-        app.config['MAIL_USERNAME'] = self.username
-        app.config['MAIL_PASSWORD'] = self.password
+        app.config['MAIL_USERNAME'] = decrypt(self.username).decode()
+        app.config['MAIL_PASSWORD'] = decrypt(self.password).decode()
         app.config['MAIL_USE_TLS'] = self.tls
         app.config['MAIL_USE_SSL'] = self.ssl
+        print(type(app.config['MAIL_USERNAME']), app.config['MAIL_PASSWORD'])
 
     def send_test_mail(self, address):
         """
@@ -259,7 +269,7 @@ class Profile(db.Model):
         if r.status_code == 400:
             return 400
         return 500
-    
+
 
 class ProfileSchema(Schema):
     id = fields.Number()
@@ -273,6 +283,16 @@ class ProfileSchema(Schema):
     ssl = fields.Boolean()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
+
+
+    @post_dump
+    def decrypt(self, data, **kwargs):
+        '''
+        Decrypt SMTP username and password
+        '''
+        data['username'] = decrypt(data['username'].encode()).decode()
+        data['password'] = decrypt(data['password'].encode()).decode()
+        return data
 
 
 # Person Classes (Targets)
@@ -476,9 +496,11 @@ class FormSchema(Schema):
     @post_dump
     def serialize_form(self, data, **kwargs):
         '''
-        Convert the submitted form data from type String back to Dict
+        Decrypt and convert the submitted form data from type String back to Dict
         '''
-        data['data'] = json.loads(data['data'])
+        decrypted_data = decrypt(data['data']).decode()
+        data['data'] = json.loads(decrypted_data)
+        #data['data'] = json.loads(data['data']) # was used before adding encryption
         return data
     
 

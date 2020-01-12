@@ -5,6 +5,7 @@ from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
 from app.functions import convert_to_bool, admin_login_required, user_login_required, validate_email_format, validate_workspace, validate_campaign_makeup, require_api_key, clone_link, update_workspace_ts, convert_to_datetime
+from app.cipher import encrypt
 import json
 import subprocess
 from flask_cors import cross_origin
@@ -32,13 +33,6 @@ def login():
         login_user(user)
         app.logger.info(f'Successful login for user {username} - Client IP address: {request.remote_addr}')
         
-        '''
-        next_page = request.args.get('next')
-        if not next_page or url_parse(next_page).netloc != '':
-            print('redirecting to home')
-            next_page = url_for('workspaces')
-        #return redirect(next_page)
-        '''
         return json.dumps({'success': True}), 200, {'ContentType':'application/json'} 
     return json.dumps({'success': False}), 200, {'ContentType':'application/json'} 
 
@@ -503,8 +497,9 @@ def profiles(workspace_id):
         elif type(ssl_bool) != bool or type(tls_bool) != bool:
             return 'ssl/tls must be either true or false', 400
 
+
         profile = Profile(name=name, from_address=from_address, smtp_host=host, smtp_port=port, \
-            username=username, password=password, tls=tls_bool, ssl=ssl_bool, workspace_id=workspace_id)
+            username=encrypt(username.encode()), password=encrypt(password.encode()), tls=tls_bool, ssl=ssl_bool, workspace_id=workspace_id)
         db.session.add(profile)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
         db.session.commit()
@@ -587,8 +582,8 @@ def profile(workspace_id, profile_id):
         profile.from_address = from_address
         profile.smtp_host = host
         profile.smtp_port = port
-        profile.username = username
-        profile.password = password
+        profile.username = encrypt(username.encode())
+        profile.password = encrypt(password.encode())
         profile.tls = tls_bool
         profile.ssl = ssl_bool
         profile.workspace_id = workspace_id
@@ -1528,8 +1523,9 @@ def record_form():
         return 'no tracker', 404
 
     app.logger.info(f'Received form data from worker for result ID {result.id} in campaign {result.campaign.name} ({result.campaign.id})')
-
-    form = Form(data=form_data)
+    
+    enc_form_data = encrypt(form_data.encode())
+    form = Form(data=enc_form_data)
 
     result.forms.append(form)
     result.status = 'Submitted'

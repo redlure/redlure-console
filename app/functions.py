@@ -12,6 +12,13 @@ from datetime import datetime
 import json
 
 
+
+class Color:
+    red = u'\u001b[38;5;197m'
+    gray = u'\u001b[38;5;251m'
+    end = '\033[0m'
+
+
 def update_workspace_ts(workspace):
     '''
     Set the updated_at attribute of the given workspace to the current datetime
