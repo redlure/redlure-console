@@ -133,15 +133,12 @@ class Profile(db.Model):
         return '<Sending Profile {}>'.format(self.name)
 
     def set_mail_configs(self):
-        print(type(self.username))
-        print(type(self.password))
         app.config['MAIL_SERVER'] = self.smtp_host
         app.config['MAIL_PORT'] = self.smtp_port
         app.config['MAIL_USERNAME'] = decrypt(self.username).decode()
         app.config['MAIL_PASSWORD'] = decrypt(self.password).decode()
         app.config['MAIL_USE_TLS'] = self.tls
         app.config['MAIL_USE_SSL'] = self.ssl
-        print(type(app.config['MAIL_USERNAME']), app.config['MAIL_PASSWORD'])
 
     def send_test_mail(self, address):
         """
@@ -517,11 +514,6 @@ class Result(db.Model):
     def __init__(self, **kwargs):
         self.status = 'Scheduled'
         self.__dict__.update(kwargs)
-
-    
-    def get_json_forms(self):
-        for form in self.forms:
-            print(json.loads(form.data))
 
 
 class ResultSchema(Schema):

@@ -773,7 +773,6 @@ def targetlists(workspace_id):
     # request is a POST
     elif request.method == 'POST':
         req_json = request.get_json()
-        print(req_json)
         name = req_json['name']
         targets = req_json['targets']
         
@@ -987,7 +986,6 @@ def email(workspace_id, email_id):
         same_email = Email.query.filter_by(name=name).first()
 
         if same_email is not None and str(same_email.id) != email_id:
-            print(same_email.name, same_email.id)
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
         track_bool = convert_to_bool(track)
@@ -1191,7 +1189,6 @@ def campaigns(workspace_id):
         db.session.commit()
         
         for idx, page in enumerate(pages):
-            print(page.name,idx)
             #page_association = Campaignpages(index=idx)
             #campaign.pages.append(page_association)
             page_association = Campaignpages(campaign_id=campaign.id, page_id=page.id, index=idx)
