@@ -1134,12 +1134,12 @@ def campaigns(workspace_id):
     # request is a POST
     elif request.method == 'POST':
         name = request.form.get('Name')
-        email_name = request.form.get('Email_Name')
-        page_names = request.form.getlist('Page_Names[]') # page names is a list of page names # page names is a list of page names
-        profile_name = request.form.get('Profile_Name')
-        list_name = request.form.get('List_Name')
-        domain_name = request.form.get('Domain_Name')
-        server_alias = request.form.get('Server_Alias')
+        email_id = request.form.get('Email')
+        page_ids = request.form.getlist('Pages[]') # page names is a list of page names # page names is a list of page names
+        profile_id = request.form.get('Profile')
+        list_id = request.form.get('List')
+        domain_id = request.form.get('Domain')
+        server_id = request.form.get('Server')
         port = request.form.get('Port')
         ssl = request.form.get('SSL')
         redirect_url = request.form.get('Redirect_URL')
@@ -1164,15 +1164,15 @@ def campaigns(workspace_id):
 
         pages = []
 
-        for page_name in page_names:
-            page = Page.query.with_entities(Page).filter((Page.name == page_name) & ((Page.workspace_id == workspace_id) | (Page.workspace_id == 1))).first()
+        for page_id in page_ids:
+            page = Page.query.with_entities(Page).filter((Page.id == page_id) & ((Page.workspace_id == workspace_id) | (Page.workspace_id == 1))).first()
             pages.append(page)
-
-        email = Email.query.with_entities(Email).filter((Email.name == email_name) & ((Email.workspace_id == workspace_id) | (Email.workspace_id == 1))).first()
-        profile = Profile.query.with_entities(Profile).filter((Profile.name == profile_name) & ((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1))).first()
-        targetlist = List.query.with_entities(List).filter((List.name == list_name) & ((List.workspace_id == workspace_id) | (List.workspace_id == 1))).first()
-        domain = Domain.query.filter_by(domain=domain_name).first()
-        server = Server.query.filter_by(alias=server_alias).first()
+        print(email_id)
+        email = Email.query.with_entities(Email).filter((Email.id == email_id) & ((Email.workspace_id == workspace_id) | (Email.workspace_id == 1))).first()
+        profile = Profile.query.with_entities(Profile).filter((Profile.id == profile_id) & ((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1))).first()
+        targetlist = List.query.with_entities(List).filter((List.id == list_id) & ((List.workspace_id == workspace_id) | (List.workspace_id == 1))).first()
+        domain = Domain.query.filter_by(id=domain_id).first()
+        server = Server.query.filter_by(id=server_id).first()
 
         # make sure all given modules exist before continuing
         makeup = validate_campaign_makeup(email, pages, profile, targetlist, domain, server)
@@ -1294,14 +1294,14 @@ def validate_ips(workspace_id):
     '''
     For POST requests, validate that the IP address of a given server and domain match
     '''
-    domain = request.form.get('Domain')
-    alias = request.form.get('Server')
-
-    domain_obj = Domain.query.filter_by(domain=domain).first()
+    domain_id = request.form.get('Domain')
+    server_id = request.form.get('Server')
+    print(domain_id)
+    domain_obj = Domain.query.filter_by(id=domain_id).first()
     if domain_obj is None:
         return 'domain does not exist', 404
 
-    server = Server.query.filter_by(alias=alias).first()
+    server = Server.query.filter_by(id=server_id).first()
     if server is None:
         return 'server does not exist', 404
 
@@ -1317,14 +1317,14 @@ def validate_certs(workspace_id):
     '''
     For POST requests, check that the provided domain has certs on the provided server
     '''
-    domain = request.form.get('Domain')
-    alias = request.form.get('Server')
+    domain_id = request.form.get('Domain')
+    server_id = request.form.get('Server')
 
-    domain_obj = Domain.query.filter_by(domain=domain).first()
+    domain_obj = Domain.query.filter_by(id=domain_id).first()
     if domain_obj is None:
         return 'domain does not exist', 404
 
-    server = Server.query.filter_by(alias=alias).first()
+    server = Server.query.filter_by(id=server_id).first()
     if server is None:
         return 'server does not exist', 404
 
@@ -1450,20 +1450,20 @@ def campaign_modules(workspace_id):
         return 'workspace does not exist', 404
 
 
-    page_names = Page.query.with_entities(Page.name).filter((Page.workspace_id == workspace_id) | (Page.workspace_id == 1)).all()
-    list_names = List.query.with_entities(List.name).filter((List.workspace_id == workspace_id) | (List.workspace_id == 1)).all()
-    email_names = Email.query.with_entities(Email.name).filter((Email.workspace_id == workspace_id) | (Email.workspace_id == 1)).all()
-    profile_names = Profile.query.with_entities(Profile.name).filter((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1)).all()
-    domain_names = Domain.query.with_entities(Domain.domain).all()
-    server_names = Server.query.with_entities(Server.id, Server.alias).all()
+    page_names = Page.query.with_entities(Page.id, Page.name).filter((Page.workspace_id == workspace_id) | (Page.workspace_id == 1)).all()
+    list_names = List.query.with_entities(List.id, List.name).filter((List.workspace_id == workspace_id) | (List.workspace_id == 1)).all()
+    email_names = Email.query.with_entities(Email.id, Email.name).filter((Email.workspace_id == workspace_id) | (Email.workspace_id == 1)).all()
+    profile_names = Profile.query.with_entities(Profile.id, Profile.name).filter((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1)).all()
+    domain_names = Domain.query.with_entities(Domain.id, Domain.domain, Domain.ip).all()
+    server_names = Server.query.with_entities(Server.id, Server.alias, Server.ip).all()
 
     all_info = {
-        "pages": [item for sublist in page_names for item in sublist], # make list of lists a flat list
-        "lists": [item for sublist in list_names for item in sublist],
-        "emails": [item for sublist in email_names for item in sublist],
-        "profiles": [item for sublist in profile_names for item in sublist],
-        "domains": [item for sublist in domain_names for item in sublist],
-        "servers": [dict(zip(['id','alias'],s)) for s in server_names] #[item for sublist in server_names for item in sublist],
+        "pages": [dict(zip(['id','name'],p)) for p in page_names],
+        "lists": [dict(zip(['id', 'name'],l)) for l in list_names],
+        "emails": [dict(zip(['id', 'name'],e)) for e in email_names],
+        "profiles": [dict(zip(['id', 'name'],p)) for p in profile_names],
+        "domains": [dict(zip(['id', 'domain', 'ip'],d)) for d in domain_names],
+        "servers": [dict(zip(['id','alias','ip'],s)) for s in server_names]
     }
 
     return jsonify(all_info), 200
