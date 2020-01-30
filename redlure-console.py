@@ -42,22 +42,24 @@ def init_cipher():
     while passphrase == '':
         passphrase =  input(f'{Color.gray}[+] Passphrase: {Color.red}').encode()
     print(f'\n[!] WARNING: Do not lose your passphrase - doing so will result in losing access to parts of your database{Color.end}')
-    
+
     new_cipher_key(passphrase)
-    
+
     input(f'\n{Color.gray}[+] Press enter to continue: {Color.end}')
 
 
 def get_cipher():
+    cipher_text = CipherTest.query.first().value
+    str = cipher_text.decode()
+    print(f'{Color.gray}{str[:len(str)//2]}\n{str[len(str)//2:]}{Color.end}\n')
     passphrase = input(f'{Color.gray}[+] Enter the cipher passphrase: {Color.red}').encode()
     new_cipher_key(passphrase)
-    cipher_text = CipherTest.query.first().value
     try:
         plain_text = decrypt(cipher_text)
         print(f'[+] {plain_text.decode()}\n{Color.end}')
     except InvalidToken:
         print(f'\n[!] Decryption failed - invalid passphrase{Color.end}')
-        exit()            
+        exit()
 
 def init_db():
     if os.path.isdir('migrations'):
