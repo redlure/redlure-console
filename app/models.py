@@ -194,7 +194,7 @@ class Profile(db.Model):
         else:
             app.logger.info(f'Scheduled campaign {campaign.name} (ID: {campaign_id}) to start at {start_time} - Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes')
             sched.start()
-        
+
         return
 
     def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, data, total_recipients, ip, port):
@@ -214,11 +214,13 @@ class Profile(db.Model):
         if len(recipients) == total_recipients:
             # If the worker gives an issue, kill off the campaign and log the error
             worker_response = self.start_worker(data, ip, port)
-            
-            if worker_response != 200:
-                app.logger.error(f'Failed to start campaign {campaign.name} (ID: {campaign.id}) - Worker web server failed to start on server {campaign.server.alias} (IP: {campaign.server.ip})')
-                sched.remove_job(job_id) 
-                campaign.status = 'Failed to start'
+
+            if not worker_response['success']:
+                msg = worker_response['msg']
+                campaign.status = msg
+                db.session.commit()
+                app.logger.error(f'Failed to start campaign {campaign.name} (ID: {campaign.id}) - Worker web server failed to start on server {campaign.server.alias} (IP: {campaign.server.ip}) - Reason: {msg}')
+                sched.remove_job(job_id)
                 return
             else:
                 app.logger.info(f'Campaign {campaign.name} (ID: {campaign.id}) successfully started web server on {campaign.server.alias} (IP: {campaign.server.ip})')
@@ -261,11 +263,7 @@ class Profile(db.Model):
         # tell worker to start hosting
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
-        if r.status_code == 200:
-            return 200
-        if r.status_code == 400:
-            return 400
-        return 500
+        return r.json()
 
 
 class ProfileSchema(Schema):
