@@ -155,8 +155,8 @@ class Profile(db.Model):
             return True
         except Exception:
            return False
-    
-    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port):
+
+    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port, url):
         """
         Schedules a campaign to execute in a separate thread. The user decides when it will run, how many emails to send at a time, and how long to wait between batches.
         @param email:
@@ -173,7 +173,7 @@ class Profile(db.Model):
         sched = BackgroundScheduler()
         job_id = str(campaign_id)
         targets = list(targets)
-        
+
         # Ensures that batch_size and interval are set
         #batch_size = len(targets) if not batch_size else batch_size
         #interval = 0 if not interval else interval
@@ -191,7 +191,7 @@ class Profile(db.Model):
 
         # Schedule the campaign and intialize it
         try:
-            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port])
+            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port, url])
         except Exception:
             app.logger.exception(f'Error scheduling campaign {campaign.name} (ID: {campaign_id})')
         else:
@@ -200,7 +200,7 @@ class Profile(db.Model):
 
         return
 
-    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, data, total_recipients, ip, port):
+    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, data, total_recipients, ip, port, url):
         """
         Sends emails to the targets in batches.  This function alwasy runs on a separate thread.
         @param recipients: list - all remaining targets to send an email to for the specified campaign
@@ -235,7 +235,7 @@ class Profile(db.Model):
                 recipient = recipients.pop()
 
                 msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id)
+                msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id, url=url)
                 msg.body = html2text.html2text(msg.html.decode())
 
                 # Since this function is in a different thread, it doesn't have the app's context by default
@@ -351,7 +351,7 @@ class Email(db.Model):
     def __repr__(self):
         return '<Email {}>'.format(self.name)
 
-    def prep_html(self, base_url, target, campaign_id):
+    def prep_html(self, base_url, target, campaign_id, url):
         '''
         Replace variables in the email HTML with proper values and insert the tracking image URL if needed.
         '''
@@ -373,11 +373,13 @@ class Email(db.Model):
             base_url = f'http://{domain}:{port}'
             payload_url = f'http://{domain}:{port}{payload_url_path}?id={result.tracker}'
 
+        if url[0] != '/': url = '/' + url
+
         html = self.html
         if target.first_name: html = html.replace(b'{{ fname }}', str.encode(target.first_name))
         if target.last_name: html = html.replace(b'{{ lname }}', str.encode(target.last_name))
         if target.first_name and target.last_name: html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
-        html = html.replace(b'{{ url }}', str.encode('%s/%s' % (base_url, result.tracker)))
+        html = html.replace(b'{{ url }}', str.encode('%s%s?id=%s' % (base_url, url, result.tracker)))
         html = html.replace(b'{{ id }}', str.encode(result.tracker))
         html = html.replace(b'{{ payload_url }}', str.encode(payload_url))
 
@@ -713,8 +715,9 @@ class Campaign(db.Model):
 
     def cast(self, data):
         # schedule the campaign
+        url = Campaignpages.query.filter_by(campaign_id=self.id, index=0).first().page.url
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
-        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port)
+        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port, url=url)
         self.status = 'Scheduled'
         db.session.commit()
 
