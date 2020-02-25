@@ -183,7 +183,10 @@ class Profile(db.Model):
         # In case the batch size or interval are blank, set them appropriately 
         if not batch_size: batch_size = len(targets)
         if not interval: interval = 0
-        
+
+        interval = int(interval)
+        batch_size = int(batch_size)
+
         campaign = Campaign.query.filter_by(id=campaign_id).first()
 
         # Schedule the campaign and intialize it
@@ -767,4 +770,4 @@ class ResultCampaignSchema(Schema):
     status = fields.Str()
     server = fields.Nested(ServerSchema, strict=True)
     domain = fields.Nested(DomainSchema, strict=True)
-    start_time = fields.DateTime(format='%m-%d-%y')
+    start_time = fields.DateTime(format='%m-%d-%y %H:%M')
