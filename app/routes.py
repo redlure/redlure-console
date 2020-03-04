@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from app import app, db
-from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages, ResultCampaignSchema
+from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages, ResultCampaignSchema, Event, EventSchema
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 from flask_mail import Mail, Message
@@ -46,7 +46,7 @@ def logout():
     '''
     app.logger.info(f'Successful logout for user {current_user.username} - Client IP address {request.remote_addr}')
     logout_user()
-    return redirect(url_for('login'))
+    return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/api')
@@ -616,9 +616,17 @@ def workspaces():
         workspace = Workspace.query.filter_by(name=name).first()
         if workspace is None:
             workspace = Workspace(name=name)
+
+            # give all admin roles permissions to the new workspace
             admins = Role.query.filter_by(role_type='Administrator').all()
             for admin in admins:
                 admin.workspaces.append(workspace)
+
+            # if the user posting the workspace is not an admin, give their role permissions
+            print(current_user.role.role_type)
+            if current_user.role.role_type == 'User':
+                current_user.role.workspaces.append(workspace)
+
             db.session.add(workspace)
             db.session.commit()
             schema = WorkspaceSchema()
@@ -1332,36 +1340,6 @@ def validate_certs(workspace_id):
     return json.dumps(data.json()), 200, {'ContentType':'application/json'}
 
 
-'''
-# Currently dead code
-@app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/cast', methods=['GET'])
-@login_required
-@user_login_required
-def cast(workspace_id, campaign_id):
-    #For GET requests, kick off the given campaign.
-    if not validate_workspace(workspace_id):
-        return json.dumps({'success': False, 'reasonCode': 1}), 200, {'ContentType':'application/json'}
-
-    campaign = Campaign.query.filter_by(id=campaign_id, workspace_id=workspace_id).first()
-    if campaign is None:
-        return json.dumps({'success': False, 'reasonCode': 2}), 200, {'ContentType':'application/json'}
-
-    if campaign.status != 'Inactive':
-        return json.dumps({'success': False, 'reasonCode': 3}), 200, {'ContentType':'application/json'}
-
-    if campaign.server.check_status() != 'Online':
-        return json.dumps({'success': False, 'reasonCode': 4}), 200, {'ContentType':'application/json'}
-
-    schema = WorkerCampaignSchema()
-    campaign_data = schema.dump(campaign)
-    
-    campaign.prep_tracking()
-    campaign.cast(campaign_data)
-    
-    return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
-'''
-
-
 @app.route('/workspaces/<workspace_id>/campaigns/<campaign_id>/kill', methods=['GET'])
 @login_required
 @user_login_required
@@ -1386,7 +1364,7 @@ def kill(workspace_id, campaign_id):
         return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
     http_code = campaign.kill()
-    
+
     if http_code != 200:
         app.logger.warning(f'Error stopping campaign {campaign.name} (ID: {campaign.id}) - Stop attempted by {current_user.username} - Client IP address {request.remote_addr}')
         return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
@@ -1434,8 +1412,44 @@ def workspace_results(workspace_id):
 
     schema = ResultSchema(many=True)
     results = schema.dump(workspace_results)
-   
+
     return jsonify(c_results, results)
+
+
+@app.route('/results/generic', methods=['GET', 'DELETE'])
+@login_required
+@user_login_required
+def generic_results():
+    '''
+    For GET requests, return submitted events without a result ID
+    For DELETE requests, delete all submitted events without a result ID
+    '''
+
+    if request.method == 'GET':
+        generic_submits = Event.query.filter_by(result_id=None).all()
+        schema = EventSchema(many=True)
+        data = schema.dump(generic_submits)
+        return jsonify(data)
+    elif request.method == 'DELETE':
+        Event.query.filter_by(result_id=None).delete()
+        db.session.commit()
+        return 'results deleted', 204
+
+
+@app.route('/results/generic/<event_id>', methods=['DELETE'])
+@login_required
+@user_login_required
+def generic_result(event_id):
+    '''
+    For DELETE requests, delete the specified event, if event has no result ID
+    '''
+    event = Event.query.filter_by(id=event_id).first()
+    if event.result_id != None:
+        return 'event has a result ID', 404
+
+    db.session.delete(event)
+    db.session.commit()
+    return 'event deleted', 204
 
 
 @app.route('/workspaces/<workspace_id>/campaigns/modules')
@@ -1480,6 +1494,7 @@ def record_action():
     '''
     tracker = request.form.get('tracker')
     action = request.form.get('action')
+    ip = request.form.get('ip')
 
     result = Result.query.filter_by(tracker=tracker).first()
 
@@ -1488,6 +1503,9 @@ def record_action():
         return 'no tracker', 404
 
     app.logger.info(f'Received {action} status from worker for result ID {result.id} in campaign {result.campaign.name} ({result.campaign.id})')
+    event = Event(ip_address=ip, action=action, time=datetime.now())
+    result.events.append(event)
+    db.session.commit()
 
     # update result status in the database
     if result.status != 'Submitted':
@@ -1513,18 +1531,32 @@ def record_form():
     '''
     tracker = request.form.get('tracker')
     form_data = request.form.get('data')
+    ip = request.form.get('ip')
 
     result = Result.query.filter_by(tracker=tracker).first()
-    # tracker string is not in db
-    if result is None:
-        return 'no tracker', 404
 
-    app.logger.info(f'Received form data from worker for result ID {result.id} in campaign {result.campaign.name} ({result.campaign.id})')
-    
+    # create event
+    event = Event(ip_address=ip, action='Submitted', time=datetime.now())
+
+    # create form
     enc_form_data = encrypt(form_data.encode())
     form = Form(data=enc_form_data)
 
-    result.forms.append(form)
-    result.status = 'Submitted'
-    db.session.commit()
+    # add form to event object
+    event.form = form
+
+    # tracker string is not in db, add event + form will null result ID
+    if result is None:
+        db.session.add(event)
+        db.session.commit()
+
+    # else add event + form to our result
+    else:
+        app.logger.info(f'Received form data from worker for result ID {result.id} in campaign {result.campaign.name} ({result.campaign.id})')
+
+        # add event to result object
+        result.events.append(event)
+        #result.forms.append(form)
+        result.status = 'Submitted'
+        db.session.commit()
     return 'updated'

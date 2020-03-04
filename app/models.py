@@ -42,8 +42,8 @@ class Workspace(db.Model):
     emails = db.relationship('Email', backref='workspace', lazy=True, cascade='all,delete')
     pages = db.relationship('Page', backref='workspace', lazy=True, cascade='all,delete')
     campaigns = db.relationship('Campaign', backref='workspace', lazy=True, cascade='all,delete')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
 
     def __repr__(self):
@@ -126,8 +126,8 @@ class Profile(db.Model):
     ssl = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='profile', cascade='all, delete-orphan')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
     def __repr__(self):
         return '<Sending Profile {}>'.format(self.name)
@@ -250,8 +250,10 @@ class Profile(db.Model):
                 # Updates email's status in database
                 result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
                 result.status = 'Sent'
+                event = Event(action='Sent', time=datetime.now(), ip_address='N/A')
+                result.events.append(event)
                 db.session.commit()
-            
+
             # When all targets have been emailed, the job has to be explicitly removed
             else:
                 sched.remove_job(job_id=job_id)
@@ -320,8 +322,8 @@ class List(db.Model):
     targets = db.relationship('Person', backref='list', lazy=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='list', lazy=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
     def __repr__(self):
         return '<Target List {}>'.format(self.name)
@@ -345,8 +347,8 @@ class Email(db.Model):
     track = db.Column(db.Boolean, default=True, nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
     campaigns = db.relationship('Campaign', backref='email', lazy=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
     def __repr__(self):
         return '<Email {}>'.format(self.name)
@@ -412,8 +414,8 @@ class Page(db.Model):
     html = db.Column(db.LargeBinary, nullable=False)
     url = db.Column(db.String(64), nullable=False)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     campaigns = db.relationship('Campaignpages', backref='page', cascade='all, delete-orphan')
 
 
@@ -484,13 +486,15 @@ class DomainSchema(Schema):
 # Form Classes (HTML form data submitted by victims)
 class Form(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    result_id = db.Column(db.Integer, db.ForeignKey('result.id'))
+    #result_id = db.Column(db.Integer, db.ForeignKey('result.id'), nullable=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
     data = db.Column(db.String(128))
 
 
 class FormSchema(Schema):
     id = fields.Number()
-    result_id = fields.Number()
+    #result_id = fields.Number()
+    event_id = fields.Number()
     data = fields.Dict()
 
     @post_dump
@@ -500,9 +504,27 @@ class FormSchema(Schema):
         '''
         decrypted_data = decrypt(data['data']).decode()
         data['data'] = json.loads(decrypted_data)
-        #data['data'] = json.loads(data['data']) # was used before adding encryption
         return data
-    
+
+
+# Event class (tracks each open,click,download,submission in the database with timestamps and IPs)
+class Event(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    result_id = db.Column(db.Integer, db.ForeignKey('result.id'), nullable=True)
+    ip_address = db.Column(db.String(32))
+    action = db.Column(db.String(32))
+    time = db.Column(db.DateTime)
+    form = db.relationship('Form', backref='event', uselist=False, lazy=True, cascade='all,delete')
+
+
+class EventSchema(Schema):
+    id = fields.Number()
+    result_id = fields.Number()
+    ip_address = fields.Str()
+    action = fields.Str()
+    time = fields.DateTime(format='%m-%d-%y %H:%M:%S')
+    form = fields.Nested(FormSchema, strict=True)
+
 
 # Result Classes
 class Result(db.Model):
@@ -511,8 +533,8 @@ class Result(db.Model):
     person_id = db.Column(db.Integer, db.ForeignKey('person.id'))
     tracker = db.Column(db.String(32), nullable=False, unique=True)
     status = db.Column(db.String(32))
-    forms = db.relationship('Form', backref='result', lazy=True, cascade='all,delete')
-
+    #forms = db.relationship('Form', backref='result', lazy=True, cascade='all,delete')
+    events = db.relationship('Event', backref='result', lazy=True, cascade='all,delete')
 
     def __init__(self, **kwargs):
         self.status = 'Scheduled'
@@ -525,7 +547,8 @@ class ResultSchema(Schema):
     person = fields.Nested(PersonSchema, strict=True)
     tracker = fields.Str()
     status = fields.Str()
-    forms = fields.Nested(FormSchema, strict=True, many=True)
+    #forms = fields.Nested(FormSchema, strict=True, many=True)
+    events = fields.Nested(EventSchema, strict=True, many=True)
 
 
 # Server classes
@@ -655,8 +678,6 @@ class Campaignpages(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), primary_key=True)
     page_id = db.Column(db.Integer, db.ForeignKey('page.id'), primary_key=True)
     index = db.Column(db.Integer)
-    #page = db.relationship('Page', backref='campaigns')
-    #campaign = db.relationship('Campaign', backref='pages', lazy='joined', cascade='all, delete', order_by='asc(Campaignpages.index)')
 
 
 class CampaignpagesSchema(Schema):
@@ -678,11 +699,11 @@ class Campaign(db.Model):
     port = db.Column(db.Integer, nullable=False)
     ssl = db.Column(db.Boolean, nullable=False)
     results = db.relationship('Result', backref='campaign', lazy=True, cascade='all,delete')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     status = db.Column(db.String(32), nullable=False)
     start_time = db.Column(db.DateTime, nullable=True, default='')
-    #end_time = db.Column(db.DateTime, nullable=True, default='')
+    end_time = db.Column(db.DateTime, nullable=True, default=datetime(1, 1, 1, 0, 0, 0)) # For some reason the real end date does not get stored unless the attribute is initialized with a datetime
     send_interval = db.Column(db.Integer, default=0)  # Number of minutes to wait between sending batch of emails
     batch_size = db.Column(db.Integer)
     payload_url = db.Column(db.String(64))
@@ -694,17 +715,18 @@ class Campaign(db.Model):
         self.status = 'Inactive'
         self.__dict__.update(kwargs)
 
+
     def __repr__(self):
         return '<Campaign {}>'.format(self.name)
 
-    
+
     def prep_tracking(self, targets):
         for target in targets:
             tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
 
             # make sure the tracker is not a repeat
             result = Result.query.filter_by(tracker=tracker).first()
-            
+
             if result is None:
                 result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
                 db.session.add(result)
@@ -727,8 +749,8 @@ class Campaign(db.Model):
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
         if r.status_code == 200:
+            self.end_time = datetime.now()
             self.status = 'Complete'
-            #self.end_date = datetime.utcnow
             db.session.commit()
         return r.status_code
 
@@ -746,11 +768,11 @@ class CampaignSchema(Schema):
     server = fields.Nested(ServerSchema, strict=True)
     port = fields.Number()
     ssl = fields.Boolean()
-    created_at = fields.DateTime()
-    updated_at = fields.DateTime()
+    created_at = fields.DateTime(format='%m-%d-%y %H:%M')
+    updated_at = fields.DateTime(format='%m-%d-%y %H:%M')
     status = fields.Str()
     payload_url = fields.Str()
-    start_time = fields.DateTime()
+    start_time = fields.DateTime(format='%m-%d-%y %H:%M')
     payload_file = fields.Str()
 
 
@@ -774,3 +796,4 @@ class ResultCampaignSchema(Schema):
     server = fields.Nested(ServerSchema, strict=True)
     domain = fields.Nested(DomainSchema, strict=True)
     start_time = fields.DateTime(format='%m-%d-%y %H:%M')
+    end_time = fields.DateTime(format='%m-%d-%y %H:%M')

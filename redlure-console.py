@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from app import app, db, functions
-from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form, Campaignpages, WorkerCampaignSchema, CipherTest
+from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form, Campaignpages, WorkerCampaignSchema, CipherTest, Event
 from app.functions import Color
 import subprocess
 import os
@@ -31,7 +31,8 @@ def make_shell_context():
         'Server': Server,
         'APIKey': APIKey,
         'Form': Form,
-        'Campaignpages': Campaignpages
+        'Campaignpages': Campaignpages,
+        'Event': Event
     }
 
 
@@ -65,16 +66,16 @@ def init_db():
     if os.path.isdir('migrations'):
         shutil.rmtree('migrations')
 
-    print(f'\n{Color.red}[*] Creating database\n{Color.end}')
+    print(f'\n{Color.red}[*] Creating database{Color.end}')
 
-    proc = subprocess.Popen(shlex.split('flask db init'))
+    proc = subprocess.Popen(shlex.split('flask db init'), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     proc.wait()
-    proc = subprocess.Popen(shlex.split('flask db migrate'))
+    proc = subprocess.Popen(shlex.split('flask db migrate'), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     proc.wait()
-    proc = subprocess.Popen(shlex.split('flask db upgrade'))
+    proc = subprocess.Popen(shlex.split('flask db upgrade'), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     proc.wait()
 
-    print(f'\n{Color.red}[+] Initializing database values\n{Color.end}')
+    print(f'{Color.red}[+] Initializing database values\n{Color.end}')
 
     general_ws = Workspace(name='General')
     db.session.add(general_ws)
