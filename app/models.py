@@ -789,6 +789,15 @@ class WorkerCampaignSchema(Schema):
     payload_file = fields.Str()
 
 
+    @post_dump
+    def order_pages(self, data, **kwargs):
+        '''
+        Order html pages by index attribute
+        '''
+        data['pages'].sort(key=lambda x: x['index'])
+        return data
+
+
 class ResultCampaignSchema(Schema):
     id = fields.Number()
     name = fields.Str()
