@@ -238,19 +238,23 @@ class Profile(db.Model):
                 msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id, url=url)
                 msg.body = html2text.html2text(msg.html.decode())
 
+                status = ''
+
                 # Since this function is in a different thread, it doesn't have the app's context by default
                 with app.app_context():
                     try:
                         mail.send(msg)
-                    except Exception:
-                        app.logger.exception(f'Error sending email to {recipient.email} for {campaign.name} (ID: {campaign.id})')
+                    except Exception as e:
+                        status = 'Error'
+                        app.logger.exception(f'Error sending email to {recipient.email} for {campaign.name} (ID: {campaign.id}) - {e}')
                     else:
+                        status = 'Sent'
                         app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {campaign.name} (ID: {campaign.id})')
 
                 # Updates email's status in database
                 result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
-                result.status = 'Sent'
-                event = Event(action='Sent', time=datetime.now(), ip_address='N/A')
+                result.status = status
+                event = Event(action=status, time=datetime.now(), ip_address='N/A')
                 result.events.append(event)
                 db.session.commit()
 
