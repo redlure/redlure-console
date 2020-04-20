@@ -31,6 +31,9 @@ redlure is comprised of three components:
     <img src="assets/diagram.png" height="600px">
 </p>
 
+## Project State
+redlure is in an ALPHA state. This means that it is working and usable within our environment, but we are unsure what difficulties may be experienced with redlure outside of our environment. Bugs are actively being discovered and fixed. 
+
 
 
 
