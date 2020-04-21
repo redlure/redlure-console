@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
+from flask import Flask, request, render_template, flash, redirect, url_for, jsonify, make_response
 from app import app, db
 from app.models import User, UserSchema, Profile, ProfileSchema, Role, RoleSchema, Workspace, WorkspaceSchema, List, ListSchema, Person, PersonSchema, Campaign, CampaignSchema, WorkerCampaignSchema, Domain, DomainSchema, Email, EmailSchema, Result, ResultSchema, Page, PageSchema, Server, ServerSchema, APIKey, APIKeySchema, Form, FormSchema, Campaignpages, ResultCampaignSchema, Event, EventSchema
 from flask_login import current_user, login_user, logout_user, login_required
@@ -32,9 +32,9 @@ def login():
 
         login_user(user)
         app.logger.info(f'Successful login for user {username} - Client IP address: {request.remote_addr}')
-        
-        return json.dumps({'success': True}), 200, {'ContentType':'application/json'} 
-    return json.dumps({'success': False}), 200, {'ContentType':'application/json'} 
+
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
+    return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/logout')
@@ -1130,11 +1130,11 @@ def campaigns(workspace_id):
     # request is a GET
     if request.method == 'GET':
         all_campaigns = Campaign.query.filter_by(workspace_id=workspace_id).order_by(Campaign.updated_at.desc()).all()
-        
+
         # sort the pages associated with the campaign by index
         # for campaign in all_campaigns:
         #     campaign.pages.sort(key=lambda camp: camp.index)
-        
+
         schema = CampaignSchema(many=True)
         campaign_data = schema.dump(all_campaigns)
         return jsonify(campaign_data)
@@ -1243,6 +1243,8 @@ def campaign(workspace_id, campaign_id):
     elif request.method == 'DELETE':
         if campaign.status == 'Active':
             kill(workspace_id, campaign_id)
+        if campaign.status == 'Scheduled':
+            campaign.remove_job()
         app.logger.info(f'Deleted campaign {campaign.name} (ID: {campaign.id}) - Deleted by {current_user.username} - Client IP address {request.remote_addr}')
         db.session.delete(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
@@ -1359,8 +1361,6 @@ def kill(workspace_id, campaign_id):
         return 'campaign is not active', 400
 
     if campaign.server.check_status() != 'Online':
-        #campaign.status = 'Complete'
-        #db.session.commit()
         return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
     http_code = campaign.kill()
@@ -1370,6 +1370,11 @@ def kill(workspace_id, campaign_id):
         return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
 
     app.logger.info(f'Stopped campaign {campaign.name} (ID: {campaign.id}) - Stopped by {current_user.username} - Client IP address {request.remote_addr}')
+    sch = Result.query.filter_by(campaign_id=campaign.id, status='Scheduled').all()
+    for x in sch:
+        app.logger.warning(f'Campaign killed before email was scheduled to send to {x.person.email} - result (ID: {x.id}) deleted')
+        db.session.delete(x)
+    db.session.commit()
     return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 

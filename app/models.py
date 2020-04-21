@@ -9,7 +9,7 @@ from flask import jsonify
 from socket import gethostbyname
 import string
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import subprocess
 import shutil
@@ -21,6 +21,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 import html2text
 
+
+# Background Scheduler object
+sched = BackgroundScheduler()
+sched.start()
 
 # table to hold 1 encrypted value to test if cipher passphrase is correct
 class CipherTest(db.Model):
@@ -170,7 +174,7 @@ class Profile(db.Model):
         # Configurations
         self.set_mail_configs()
         mail = Mail(app)
-        sched = BackgroundScheduler()
+        #sched = BackgroundScheduler()
         job_id = str(campaign_id)
         targets = list(targets)
 
@@ -191,12 +195,17 @@ class Profile(db.Model):
 
         # Schedule the campaign and intialize it
         try:
-            sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port, url])
+            if start_time < datetime.now():
+                # schedule campaign to be run in 8 seconds from current timme - anything less and the campaign will wait 1 interval before sending the first batch of emails. Does not affect sending without batches or future start times
+                start_time = datetime.now() + timedelta(0,8)
+                sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=datetime.now() + timedelta(0,8), replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port, url])
+            else:
+                sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port, url])
         except Exception:
             app.logger.exception(f'Error scheduling campaign {campaign.name} (ID: {campaign_id})')
         else:
             app.logger.info(f'Scheduled campaign {campaign.name} (ID: {campaign_id}) to start at {start_time} - Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes')
-            sched.start()
+            #sched.start()
 
         return
 
@@ -212,8 +221,13 @@ class Profile(db.Model):
         @param sched: Schedule Instance - this is necessary to kill of the job 
         """
 
-        # Before sending emails, ensure the web server starts on the worker
-        campaign = Campaign.query.filter_by(id=job_id).first() 
+        campaign = Campaign.query.filter_by(id=job_id).first()
+        if campaign is None:
+            sched.remove_job(job_id)
+            app.logger.info(f'Campaign ID {job_id} does not exist - Campaign will not start, scheduled job will be removed')
+            return
+
+        # Before sending emails, ensure the web server starts on the worker 
         if len(recipients) == total_recipients:
             # If the worker gives an issue, kill off the campaign and log the error
             worker_response = self.start_worker(data, ip, port)
@@ -666,7 +680,7 @@ class APIKey(db.Model):
     def __repr__(self):
         return '<APIKey {}>'.format(self.key)
 
-    
+
     def generate_key(self):
         app.logger.info('New API key generated')
         self.key = hexlify(os.urandom(24)).decode()
@@ -753,10 +767,20 @@ class Campaign(db.Model):
         params = {'key': APIKey.query.first().key}
         r = requests.post('https://%s:%d/campaigns/kill' % (self.server.ip, self.server.port), data=payload, params=params, verify=False)
         if r.status_code == 200:
+            # remove from job scheduler
+            self.remove_job()
             self.end_time = datetime.now()
             self.status = 'Complete'
             db.session.commit()
         return r.status_code
+
+
+    def remove_job(self):
+        try:
+            sched.remove_job(str(self.id))
+        except:
+            pass
+        return
 
 
 class CampaignSchema(Schema):
