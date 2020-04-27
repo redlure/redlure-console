@@ -1482,7 +1482,8 @@ def campaign_modules(workspace_id):
         "emails": [dict(zip(['id', 'name'],e)) for e in email_names],
         "profiles": [dict(zip(['id', 'name'],p)) for p in profile_names],
         "domains": [dict(zip(['id', 'domain', 'ip'],d)) for d in domain_names],
-        "servers": [dict(zip(['id','alias','ip'],s)) for s in server_names]
+        "servers": [dict(zip(['id','alias','ip'],s)) for s in server_names],
+        "console_time": datetime.now()
     }
 
     return jsonify(all_info), 200
