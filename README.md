@@ -1,7 +1,7 @@
 # The redlure Distributed Phishing Framework
 redlure is a phishing framework designed to advance pentest and red team phishing. It could also be utilized by blue teams looking to train employees through running realistic phishing scenarios. 
 
-redlure's distributed architecture allows for multiple campaigns to be run on different ports and/or servers, while results are aggregated in a singular interface. This allows you to generate phishing templates, target lists, start/stop campaigns, change domains, change ports and generate LetsEncrypt certs on multiple workers all from one interface. 
+redlure's distributed architecture allows for multiple campaigns to be run on different ports and/or servers, while results are aggregated in a single interface. This allows you to generate phishing templates, target lists, start/stop campaigns, change domains, change ports and generate LetsEncrypt certs on multiple workers all from one interface. 
 
 ## redlure-console
 Use the [Wiki](https://github.com/redlure/redlure-console/wiki) to get started with the redlure-console.
