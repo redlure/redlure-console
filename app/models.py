@@ -399,6 +399,7 @@ class Email(db.Model):
         if target.first_name: html = html.replace(b'{{ fname }}', str.encode(target.first_name))
         if target.last_name: html = html.replace(b'{{ lname }}', str.encode(target.last_name))
         if target.first_name and target.last_name: html = html.replace(b'{{ name }}', str.encode('%s %s' % (target.first_name, target.last_name)))
+        html = html.replace(b'{{ email }}', str.encode(target.email))
         html = html.replace(b'{{ url }}', str.encode('%s%s?id=%s' % (base_url, url, result.tracker)))
         html = html.replace(b'{{ id }}', str.encode(result.tracker))
         html = html.replace(b'{{ payload_url }}', str.encode(payload_url))
