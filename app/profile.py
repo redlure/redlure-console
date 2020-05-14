@@ -31,8 +31,6 @@ class Profile(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
-    def __repr__(self):
-        return '<Sending Profile {}>'.format(self.name)
 
     def set_mail_configs(self):
         app.config['MAIL_SERVER'] = self.smtp_host
@@ -58,6 +56,12 @@ class Profile(db.Model):
             return True
         except Exception:
            return False
+
+
+    def get_mailer(self):
+        self.set_mail_configs()
+        mail = Mail(app)
+        return mail
 
 
     def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port, url):
@@ -181,13 +185,6 @@ class Profile(db.Model):
                 return
 
         return
-
-    @staticmethod
-    def start_worker(data, ip, port):
-        # tell worker to start hosting
-        params = {'key': APIKey.query.first().key}
-        r = requests.post('https://%s:%d/campaigns/start' % (ip, port), json=data, params=params, verify=False)
-        return r.json()
 
 
 class ProfileSchema(Schema):

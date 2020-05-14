@@ -249,7 +249,7 @@ def campaigns(workspace_id):
         for page_id in page_ids:
             page = Page.query.with_entities(Page).filter((Page.id == page_id) & ((Page.workspace_id == workspace_id) | (Page.workspace_id == 1))).first()
             pages.append(page)
-        print(email_id)
+
         email = Email.query.with_entities(Email).filter((Email.id == email_id) & ((Email.workspace_id == workspace_id) | (Email.workspace_id == 1))).first()
         profile = Profile.query.with_entities(Profile).filter((Profile.id == profile_id) & ((Profile.workspace_id == workspace_id) | (Profile.workspace_id == 1))).first()
         targetlist = List.query.with_entities(List).filter((List.id == list_id) & ((List.workspace_id == workspace_id) | (List.workspace_id == 1))).first()
@@ -277,12 +277,13 @@ def campaigns(workspace_id):
             db.session.add(page_association)
             db.session.commit()
 
-        schema = WorkerCampaignSchema()
-        campaign_data = schema.dump(campaign)
+        #schema = WorkerCampaignSchema()
+        #campaign_data = schema.dump(campaign)
         app.logger.info(f'Added campaign {name} (ID: {campaign.id}) (Start time: {start_time}) - Added by {current_user.username} - Client IP address {request.remote_addr}')
 
         prep_tracking(campaign.list.targets, campaign.id)
-        campaign.cast(campaign_data)
+        #campaign.cast(campaign_data)
+        campaign.cast()
 
         schema = CampaignSchema()
         data = schema.dump(campaign)

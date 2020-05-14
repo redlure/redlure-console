@@ -25,12 +25,12 @@ class Email(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
 
-    def prep_html(self, base_url, target, campaign_id, url):
+    def prep_html(self, base_url, target, result, url):
         '''
         Replace variables in the email HTML with proper values and insert the tracking image URL if needed.
         '''
         # get result for this target in this campaign
-        result = next((x for x in target.results if x.campaign_id == campaign_id), None)
+        #result = next((x for x in target.results if x.campaign_id == campaign_id), None)
         #result = Result.query.filter_by(campaign_id=int(campaign_id), person_id=target.id).first()
         # get if campaign is using SSL
         ssl = result.campaign.ssl

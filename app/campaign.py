@@ -1,4 +1,4 @@
-from app import app, db
+from app import app, db, sched
 from marshmallow import Schema, fields, post_dump
 from datetime import datetime
 from flask import request, jsonify
@@ -14,6 +14,7 @@ from app.server import Server, ServerSchema
 from app.list import List, ListSchema
 from app.page import Page, PageSchema
 from app.profile import Profile, ProfileSchema
+from app.apikey import APIKey
 from app.functions import user_login_required, convert_to_bool 
 
 
@@ -62,29 +63,113 @@ class Campaign(db.Model):
         self.status = 'Inactive'
         self.__dict__.update(kwargs)
 
-    '''
-    def prep_tracking(self, targets):
-        for target in targets:
-            tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
+    
+    def start_worker(self):
+        # tell worker to start hosting
+        schema = WorkerCampaignSchema()
+        data = schema.dump(self)
+        params = {'key': APIKey.query.first().key}
+        r = requests.post(f'https://{self.server.ip}:{self.server.port}/campaigns/start', json=data, params=params, verify=False)
+        return r.json()
 
-            # make sure the tracker is not a repeat
-            result = Result.query.filter_by(tracker=tracker).first()
 
-            if result is None:
-                result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
-                db.session.add(result)
-                db.session.commit()
-            else:
-                self.prep_tracking(self,targets=[target])
-    '''
-
-    def cast(self, data):
-        # schedule the campaign
+    def cast(self):
+        #schedule the campaign
         url = Campaignpages.query.filter_by(campaign_id=self.id, index=0).first().page.url
         base_url = 'https://%s' % self.domain.domain if self.ssl else 'http://%s' % self.domain.domain
-        self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port, url=url)
+        mail = self.profile.get_mailer()
+        #self.profile.schedule_campaign(email=self.email, targets=self.list.targets, campaign_id=self.id, base_url=base_url, interval=self.send_interval, batch_size=self.batch_size, start_time=self.start_time, data=data, ip=self.server.ip, port=self.server.port, url=url)
+        
+        job_id = str(self.id)
+
+        # Schedule the campaign and intialize it
+        current_jobs = sched.get_jobs()
+
+        # In case the batch size or interval are blank, set them appropriately 
+        if not self.batch_size: self.batch_size = len(self.list.targets)
+        if not self.send_interval: self.send_interval = 0
+        db.session.commit()
+
+        results = self.results[:]
+
+        # Schedule the campaign and intialize it
+        try:
+            if self.start_time < datetime.now():
+                # schedule campaign to be run in 8 seconds from current timme - anything less and the campaign will wait 1 interval before sending the first batch of emails. Does not affect sending without batches or future start times
+                sched.add_job(func=self.send_emails, trigger='interval', minutes=self.send_interval, id=job_id, start_date=datetime.now() + timedelta(0,8), replace_existing=True, args=[results, mail, base_url, url])
+            else:
+                sched.add_job(func=self.send_emails, trigger='interval', minutes=self.send_interval, id=job_id, start_date=self.start_time, replace_existing=True, args=[results, mail, base_url, url])
+        except Exception:
+            app.logger.exception(f'Error scheduling campaign {self.name} (ID: {self.id})')
+        else:
+            app.logger.info(f'Scheduled campaign {self.name} (ID: {self.id}) to start at {start_time} - Sending {len(self.list.targets)} emails in batches of {self.batch_size} every {self.send_interval} minutes')
+            
         self.status = 'Scheduled'
         db.session.commit()
+
+    
+    def run_campaign(self, results, mail, base_url, url):
+        # Since this function is in a different thread, it doesn't have the app's context by default
+        with app.app_context():
+            # start the worker and send emails
+            job_id = str(self.id)
+
+            if self is None:
+                sched.remove_job(job_id)
+                app.logger.info(f'Campaign ID {job_id} does not exist - Campaign will not start, scheduled job will be removed')
+                return
+
+            # Before sending emails, ensure the web server starts on the worker 
+            # If the worker gives an issue, kill off the campaign and log the error
+            if self.status == 'Scheduled':
+                worker_response = self.start_worker()
+
+                if not worker_response['success']:
+                    msg = worker_response['msg']
+                    self.status = msg
+                    db.session.commit()
+                    app.logger.error(f'Failed to start campaign {self.name} (ID: {self.id}) - Worker web server failed to start on server {self.server.alias} (IP: {self.server.ip}) - Reason: {msg}')
+                    sched.remove_job(job_id)
+                    return
+                else:
+                    app.logger.info(f'Campaign {self.name} (ID: {self.id}) successfully started web server on {self.server.alias} (IP: {self.server.ip})')
+                    self.status = 'Active'
+                    db.session.commit()
+
+        
+            for _ in range(self.batch_size):
+                if results:
+                    result = results.pop()
+                    recipient = result.person
+
+                    msg = Message(subject=self.email.subject, sender=self.profile.from_address, recipients=[recipient.email])
+                    msg.html = email.prep_html(base_url=base_url, target=recipient, result=result, url=url)
+                    msg.body = html2text.html2text(msg.html.decode())
+
+                    status = ''
+                
+                    try:
+                        mail.send(msg)
+                    except Exception as e:
+                        status = 'Error'
+                        app.logger.exception(f'Error sending email to {recipient.email} for {self.name} (ID: {self.id}) - {e}')
+                    else:
+                        status = 'Sent'
+                        app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {self.name} (ID: {self.id})')
+
+                    # Updates email's status in database
+                    result.status = status
+                    event = Event(action=status, time=datetime.now(), ip_address='N/A')
+                    result.events.append(event)
+                    db.session.commit()
+
+                # When all targets have been emailed, the job has to be explicitly removed
+                else:
+                    sched.remove_job(job_id=job_id)
+                    #with app.app_context():
+                    app.logger.info(f'Finished sending emails for campaign {self.name} (ID: {self.id})')
+                    return
+        return
 
 
     def kill(self):
