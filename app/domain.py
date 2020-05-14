@@ -1,9 +1,12 @@
 from app import app, db
 from marshmallow import Schema, fields
 from flask import request, jsonify
-from flask_login import login_required
+from flask_login import login_required, current_user
 from socket import gethostbyname
 import requests
+import json
+from app.server import Server
+from app.apikey import APIKey
 from app.functions import admin_login_required, user_login_required
 
 

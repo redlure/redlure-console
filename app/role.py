@@ -1,7 +1,7 @@
 from app import app, db
 from marshmallow import Schema, fields
-from flask import jsonify
-from flask_login import login_required
+from flask import request, jsonify
+from flask_login import login_required, current_user
 import json
 from app.workspace import Workspace, WorkspaceSchema
 from app.functions import admin_login_required, user_login_required
@@ -148,7 +148,6 @@ def workspaces():
                 admin.workspaces.append(workspace)
 
             # if the user posting the workspace is not an admin, give their role permissions
-            print(current_user.role.role_type)
             if current_user.role.role_type == 'User':
                 current_user.role.workspaces.append(workspace)
 

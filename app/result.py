@@ -1,18 +1,22 @@
 from app import app, db
 from marshmallow import Schema, fields, post_dump
-from flask import jsonify
-from flask_login import login_required
+from flask import request, jsonify
+from flask_login import login_required, current_user
 from datetime import datetime
 import random
 import json
+import string
 from app.cipher import decrypt
-from app.list import PersonSchema
-from app.campaign import Campaign, CampaignSchema
+from app.list import List, PersonSchema
+from app.campaign import Campaign, CampaignSchema, Campaignpages, WorkerCampaignSchema, convert_to_datetime, validate_campaign_makeup
 from app.workspace import Workspace, validate_workspace, update_workspace_ts
-from app.server import ServerSchema
-from app.domain import DomainSchema
+from app.server import Server, ServerSchema
+from app.domain import Domain, DomainSchema
+from app.page import Page
+from app.email import Email
+from app.profile import Profile
 from app.apikey import require_api_key
-from app.functions import user_login_required
+from app.functions import user_login_required, convert_to_bool
 
 
 ####################
@@ -277,7 +281,7 @@ def campaigns(workspace_id):
         campaign_data = schema.dump(campaign)
         app.logger.info(f'Added campaign {name} (ID: {campaign.id}) (Start time: {start_time}) - Added by {current_user.username} - Client IP address {request.remote_addr}')
 
-        campaign.prep_tracking(campaign.list.targets)
+        prep_tracking(campaign.list.targets, campaign.id)
         campaign.cast(campaign_data)
 
         schema = CampaignSchema()
@@ -410,7 +414,7 @@ def record_form():
 ############################
 #  Class Specific Helpers
 ############################
-def prep_tracking(targets):
+def prep_tracking(targets, campaign_id):
     for target in targets:
         tracker = ''.join([random.choice(string.ascii_letters) for _ in range(8)])
 
@@ -418,8 +422,8 @@ def prep_tracking(targets):
         result = Result.query.filter_by(tracker=tracker).first()
 
         if result is None:
-            result = Result(campaign_id=self.id, person_id=target.id, tracker=tracker)
+            result = Result(campaign_id=campaign_id, person_id=target.id, tracker=tracker)
             db.session.add(result)
             db.session.commit()
         else:
-            prep_tracking(targets=[target])
+            prep_tracking(targets=[target], campaign_id=campaign_id)
