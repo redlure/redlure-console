@@ -6,9 +6,9 @@ from datetime import datetime
 import random
 import json
 import string
-from app.cipher import decrypt
+from app.cipher import encrypt, decrypt
 from app.list import List, PersonSchema
-from app.campaign import Campaign, CampaignSchema, Campaignpages, WorkerCampaignSchema, convert_to_datetime, validate_campaign_makeup
+from app.campaign import Campaign, CampaignSchema, Campaignpages, WorkerCampaignSchema, Event, EventSchema, Form, FormSchema, convert_to_datetime, validate_campaign_makeup
 from app.workspace import Workspace, validate_workspace, update_workspace_ts
 from app.server import Server, ServerSchema
 from app.domain import Domain, DomainSchema
@@ -23,47 +23,11 @@ from app.functions import user_login_required, convert_to_bool
 #  Result Classes
 ####################
 
-# Form Classes (HTML form data submitted by victims)
-class Form(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
-    data = db.Column(db.String(128))
-
-
-class FormSchema(Schema):
-    id = fields.Number()
-    event_id = fields.Number()
-    data = fields.Dict()
-
-
-    @post_dump
-    def serialize_form(self, data, **kwargs):
-        '''
-        Decrypt and convert the submitted form data from type String back to Dict
-        '''
-        decrypted_data = decrypt(data['data']).decode()
-        data['data'] = json.loads(decrypted_data)
-        return data
-
-
-# Event class (tracks each open,click,download,submission in the database with timestamps and IPs)
-class Event(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    result_id = db.Column(db.Integer, db.ForeignKey('result.id'), nullable=True)
-    ip_address = db.Column(db.String(32))
-    action = db.Column(db.String(32))
-    time = db.Column(db.DateTime)
-    form = db.relationship('Form', backref='event', uselist=False, lazy=True, cascade='all,delete')
-
-
-class EventSchema(Schema):
-    id = fields.Number()
-    result_id = fields.Number()
-    ip_address = fields.Str()
-    action = fields.Str()
-    time = fields.DateTime(format='%m-%d-%y %H:%M:%S')
-    form = fields.Nested(FormSchema, strict=True)
-
+################################################
+# !!
+# Event and form classes live in campaign.py
+# to avoid cirular dependency
+################################################
 
 # Result Classes
 class Result(db.Model):

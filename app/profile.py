@@ -2,9 +2,8 @@ from app import app, db, sched
 from marshmallow import Schema, fields, post_dump
 from flask import request, jsonify
 from flask_mail import Mail, Message
-from flask_login import login_required
-from datetime import datetime, timedelta
-import html2text
+from flask_login import login_required, current_user
+from datetime import datetime
 import json
 import re
 from app.role import RoleSchema
@@ -62,129 +61,6 @@ class Profile(db.Model):
         self.set_mail_configs()
         mail = Mail(app)
         return mail
-
-
-    def schedule_campaign(self, email, targets, campaign_id, base_url, interval, batch_size, start_time, data, ip, port, url):
-        """
-        Schedules a campaign to execute in a separate thread. The user decides when it will run, how many emails to send at a time, and how long to wait between batches.
-        @param email:
-        @param targets:
-        @param campaign_id: int - Unique identifier for the campaign to execute
-        @param base_url: 
-        @param interval: int - 
-        @param batch_size: int - Number of emails to send at once
-        @param start_time: datetime - Time in which to kickoff the campaign
-        """
-        # Configurations
-        self.set_mail_configs()
-        mail = Mail(app)
-        #sched = BackgroundScheduler()
-        job_id = str(campaign_id)
-        targets = list(targets)
-
-        # Ensures that batch_size and interval are set
-        #batch_size = len(targets) if not batch_size else batch_size
-        #interval = 0 if not interval else interval
-
-        # Schedule the campaign and intialize it
-        current_jobs = sched.get_jobs()
-        # In case the batch size or interval are blank, set them appropriately 
-        if not batch_size: batch_size = len(targets)
-        if not interval: interval = 0
-
-        interval = int(interval)
-        batch_size = int(batch_size)
-
-        campaign = Campaign.query.filter_by(id=campaign_id).first()
-
-        # Schedule the campaign and intialize it
-        try:
-            if start_time < datetime.now():
-                # schedule campaign to be run in 8 seconds from current timme - anything less and the campaign will wait 1 interval before sending the first batch of emails. Does not affect sending without batches or future start times
-                start_time = datetime.now() + timedelta(0,8)
-                sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=datetime.now() + timedelta(0,8), replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port, url])
-            else:
-                sched.add_job(func=self.send_emails, trigger='interval', minutes=interval, id=job_id, start_date=start_time, replace_existing=True, args=[targets, email, mail, base_url, job_id, batch_size, sched, data, len(targets), ip, port, url])
-        except Exception:
-            app.logger.exception(f'Error scheduling campaign {campaign.name} (ID: {campaign_id})')
-        else:
-            app.logger.info(f'Scheduled campaign {campaign.name} (ID: {campaign_id}) to start at {start_time} - Sending {len(targets)} emails in batches of {batch_size} every {interval} minutes')
-            #sched.start()
-
-        return
-
-
-    def send_emails(self, recipients, email, mail, base_url, job_id, batch_size, sched, data, total_recipients, ip, port, url):
-        """
-        Sends emails to the targets in batches.  This function alwasy runs on a separate thread.
-        @param recipients: list - all remaining targets to send an email to for the specified campaign
-        @param email:
-        @param mail: Flask Mail Instance
-        @param base_url: 
-        @param job_id: int - Unique identifier for the scheduled job (it is identical to campaign_id)
-        @param batch_size: int - Number of emails to send at once
-        @param sched: Schedule Instance - this is necessary to kill of the job 
-        """
-
-        campaign = Campaign.query.filter_by(id=job_id).first()
-        if campaign is None:
-            sched.remove_job(job_id)
-            app.logger.info(f'Campaign ID {job_id} does not exist - Campaign will not start, scheduled job will be removed')
-            return
-
-        # Before sending emails, ensure the web server starts on the worker 
-        if len(recipients) == total_recipients:
-            # If the worker gives an issue, kill off the campaign and log the error
-            worker_response = self.start_worker(data, ip, port)
-
-            if not worker_response['success']:
-                msg = worker_response['msg']
-                campaign.status = msg
-                db.session.commit()
-                app.logger.error(f'Failed to start campaign {campaign.name} (ID: {campaign.id}) - Worker web server failed to start on server {campaign.server.alias} (IP: {campaign.server.ip}) - Reason: {msg}')
-                sched.remove_job(job_id)
-                return
-            else:
-                app.logger.info(f'Campaign {campaign.name} (ID: {campaign.id}) successfully started web server on {campaign.server.alias} (IP: {campaign.server.ip})')
-                campaign.status = 'Active'
-                db.session.commit()
-
-        for _ in range(batch_size):
-            if recipients:
-                recipient = recipients.pop()
-
-                msg = Message(subject=email.subject, sender=self.from_address, recipients=[recipient.email])
-                msg.html = email.prep_html(base_url=base_url, target=recipient, campaign_id=job_id, url=url)
-                msg.body = html2text.html2text(msg.html.decode())
-
-                status = ''
-
-                # Since this function is in a different thread, it doesn't have the app's context by default
-                with app.app_context():
-                    try:
-                        mail.send(msg)
-                    except Exception as e:
-                        status = 'Error'
-                        app.logger.exception(f'Error sending email to {recipient.email} for {campaign.name} (ID: {campaign.id}) - {e}')
-                    else:
-                        status = 'Sent'
-                        app.logger.info(f'Email succesflly sent to {recipient.email} for campaign {campaign.name} (ID: {campaign.id})')
-
-                # Updates email's status in database
-                result = Result.query.filter_by(campaign_id=int(job_id), person_id=recipient.id).first()
-                result.status = status
-                event = Event(action=status, time=datetime.now(), ip_address='N/A')
-                result.events.append(event)
-                db.session.commit()
-
-            # When all targets have been emailed, the job has to be explicitly removed
-            else:
-                sched.remove_job(job_id=job_id)
-                #with app.app_context():
-                app.logger.info(f'Finished sending emails for campaign {campaign.name} (ID: {campaign.id})')
-                return
-
-        return
 
 
 class ProfileSchema(Schema):
