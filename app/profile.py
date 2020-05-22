@@ -5,6 +5,7 @@ from flask_mail import Mail, Message
 from flask_login import login_required, current_user
 from datetime import datetime
 import json
+import html2text
 import re
 from app.role import RoleSchema
 from app.cipher import encrypt, decrypt
