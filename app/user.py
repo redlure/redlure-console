@@ -135,7 +135,7 @@ def reset_password(user_id):
     return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 
-@app.route('/users/<user_id>', methods=['GET', 'DELETE'])
+@app.route('/users/<user_id>', methods=['GET', 'PUT', 'DELETE'])
 @login_required
 @admin_login_required
 def user(user_id):
@@ -153,7 +153,19 @@ def user(user_id):
         schema = UserSchema()
         user_data = schema.dump(user)
         return jsonify(user_data)
-    
+
+    elif request.method == 'PUT':
+        role_id = request.form.get('RoleID')
+        role = Role.query.filter_by(id=role_id).first()
+
+        if role is None:
+            return json.dumps({'success': False, 'msg': 'Role does not exist'}), 200, {'ContentType':'application/json'}
+
+        user.role_id = role_id
+        db.session.commit()
+        app.logger.info(f'Changed role of {user.username} to {role.name} - Changed by {current_user.username} - Client IP address {request.remote_addr}')
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
+
     # request is a DELETE
     elif request.method == 'DELETE':
         if current_user == user:
