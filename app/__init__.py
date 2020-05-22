@@ -8,6 +8,8 @@ import os
 import logging
 from flask_cors import CORS
 from logging.handlers import RotatingFileHandler
+from apscheduler.schedulers.background import BackgroundScheduler
+
 
 app = Flask(__name__)
 app.debug = True
@@ -18,7 +20,11 @@ migrate = Migrate(app, db)
 login = LoginManager(app)
 login.login_view = 'login'
 
-from app import routes, models
+# Background Scheduler object
+sched = BackgroundScheduler()
+sched.start()
+
+from app import apikey, campaign, cipher, domain, email, list, page, profile, result, role, server, user, workspace
 
 
 # create logs dir if it does not exist

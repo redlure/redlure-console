@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from app import app, db, functions
-from app.models import User, Profile, Role, Workspace, List, Person, Email, Page, Domain, Campaign, Result, Server, APIKey, Form, Campaignpages, WorkerCampaignSchema, CipherTest, Event
 from app.functions import Color
 import subprocess
 import os
@@ -9,7 +8,19 @@ import shutil
 from config import Config
 from datetime import datetime
 from cryptography.fernet import InvalidToken
-from app.cipher import Cipher, new_cipher_key, encrypt, decrypt
+from app.cipher import CipherTest, Cipher, new_cipher_key, encrypt, decrypt
+from app.workspace import Workspace
+from app.role import Role
+from app.user import User
+from app.profile import Profile
+from app.list import List, Person
+from app.email import Email
+from app.page import Page
+from app.domain import Domain
+from app.campaign import Campaign, Campaignpages, WorkerCampaignSchema
+from app.result import Result, Form, Event
+from app.server import Server
+from app.apikey import APIKey
 
 
 # objects to initialize 'flask shell' with
