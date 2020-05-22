@@ -10,7 +10,7 @@ import re
 from app.role import RoleSchema
 from app.cipher import encrypt, decrypt
 from app.workspace import Workspace, validate_workspace, update_workspace_ts
-from app.functions import admin_login_required, user_login_required
+from app.functions import admin_login_required, user_login_required, convert_to_bool
 
 
 ############################
