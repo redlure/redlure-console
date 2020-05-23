@@ -175,14 +175,14 @@ def server(server_id):
         same_server = Server.query.filter_by(alias=alias).first()
 
         if same_server is not None and str(same_server.id) != server_id:
-            return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
+            return json.dumps({'success': False, 'msg': f'Server with alias {alias} already exists'}), 200, {'ContentType':'application/json'}
 
         server_obj.ip = ip
         server_obj.alias = alias
         server_obj.port = port
         db.session.commit()
         app.logger.info(f'Updated server {server_obj.alias} - Updated by {current_user.username} - Client IP address {request.remote_addr}')
-        return 'server updated'
+        return json.dumps({'success': True}), 200, {'ContentType':'application/json'}
 
 
 @app.route('/servers/<server_id>/status')
