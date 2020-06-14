@@ -21,7 +21,10 @@ from app.campaign import Campaign, Campaignpages, WorkerCampaignSchema
 from app.result import Result, Form, Event
 from app.server import Server
 from app.apikey import APIKey
+import urllib3
 
+# suppress insecure requests warning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # objects to initialize 'flask shell' with
 @app.shell_context_processor

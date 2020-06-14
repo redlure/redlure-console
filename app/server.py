@@ -5,7 +5,7 @@ from flask_login import login_required, current_user
 from datetime import datetime
 import requests
 import json
-from app.apikey import APIKey
+from app.apikey import APIKey, require_api_key
 from app.functions import admin_login_required, user_login_required
 
 
@@ -30,9 +30,12 @@ class Server(db.Model):
     def check_status(self):
         params = {'key': APIKey.query.first().key}
         try:
-            r = requests.post(f'https://{self.ip}:{self.port}/status', params=params, verify=False, timeout=5)
+            r = requests.post(f'https://{self.ip}:{self.port}/status', params=params, verify=False, timeout=8)
             if r.status_code == 200:
-                self.status = 'Online'
+                if r.json()['success']:
+                    self.status = 'Online'
+                else:
+                    self.status = r.json()['msg']
             elif r.status_code == 401:
                 self.status = 'Mismatching API Key'
             else:
@@ -260,3 +263,16 @@ def server_file_delete(server_id):
         data = server_obj.delete_file(filename)
         app.logger.info(f'Deleted {filename} from {server_obj.alias} ({server_obj.ip}) - Deleted by {current_user.username} - Client IP address {request.remote_addr}')
     return json.dumps(data.json()), 200, {'ContentType':'application/json'}
+
+
+#################################
+# General route used by workers
+# to check connection to console
+#################################
+@app.route('/status', methods=['POST'])
+@require_api_key
+def status():
+    ip = request.remote_addr
+    server = Server.query.filter_by(ip=ip).first()
+    app.logger.info(f'Received check-in from {server.alias} ({ip})')
+    return 'responsive', 200
