@@ -18,6 +18,7 @@ flask-cors = "*"
 apscheduler = "*"
 lxml = "*"
 html2text = "*"
+python-magic = "*"
 
 [dev-packages]
 pylint = "*"

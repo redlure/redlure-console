@@ -195,7 +195,14 @@ def campaigns(workspace_id):
         payload_url = request.form.get('Payload_URL')
         payload_file = request.form.get('Payload_File')
 
-        #print(start_time)
+        if len(request.files) > 0:
+            attach = request.files['Attachment']
+            attach_name = attach.filename
+            attach_bytes = attach.read()
+        else:
+            attach_name = None
+            attach_bytes = None
+
         if start_time:
             start_time = convert_to_datetime(start_time)
         else:
@@ -228,7 +235,7 @@ def campaigns(workspace_id):
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
                 start_time=start_time, send_interval=interval, batch_size=batch_size, \
                 list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url, \
-                payload_url=payload_url, payload_file=payload_file)
+                payload_url=payload_url, payload_file=payload_file, attachment=attach_bytes, attachment_name=attach_name)
 
         db.session.add(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
@@ -309,6 +316,7 @@ def record_action():
     tracker = request.form.get('tracker')
     action = request.form.get('action')
     ip = request.form.get('ip')
+    user_agent = request.form.get('user-agent')
 
     result = Result.query.filter_by(tracker=tracker).first()
 
@@ -317,7 +325,7 @@ def record_action():
         return 'no tracker', 404
 
     app.logger.info(f'Received {action} status from worker for result ID {result.id} in campaign {result.campaign.name} ({result.campaign.id})')
-    event = Event(ip_address=ip, action=action, time=datetime.now())
+    event = Event(ip_address=ip, user_agent=user_agent, action=action, time=datetime.now())
     result.events.append(event)
     db.session.commit()
 
@@ -346,11 +354,12 @@ def record_form():
     tracker = request.form.get('tracker')
     form_data = request.form.get('data')
     ip = request.form.get('ip')
+    user_agent = request.form.get('user-agent')
 
     result = Result.query.filter_by(tracker=tracker).first()
 
     # create event
-    event = Event(ip_address=ip, action='Submitted', time=datetime.now())
+    event = Event(ip_address=ip, user_agent=user_agent, action='Submitted', time=datetime.now())
 
     # create form
     enc_form_data = encrypt(form_data.encode())

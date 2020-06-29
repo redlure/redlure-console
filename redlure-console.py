@@ -120,9 +120,9 @@ def check_campaigns():
     campaigns = Campaign.query.filter_by(status='Scheduled').all()
     for campaign in campaigns:
         if datetime.now() < campaign.start_time:
-            schema = WorkerCampaignSchema()
-            campaign_data = schema.dump(campaign)
-            campaign.cast(campaign_data)
+            #schema = WorkerCampaignSchema()
+            #campaign_data = schema.dump(campaign)
+            campaign.cast()
 
         else:
             campaign.status = 'Start time missed (server outage)'

@@ -274,5 +274,8 @@ def server_file_delete(server_id):
 def status():
     ip = request.remote_addr
     server = Server.query.filter_by(ip=ip).first()
-    app.logger.info(f'Received check-in from {server.alias} ({ip})')
+    if server:
+        app.logger.info(f'Received check-in from {server.alias} ({ip})')
+    else:
+        app.logger.info(f'Received check-in from {ip}')
     return 'responsive', 200

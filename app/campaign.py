@@ -8,6 +8,7 @@ import json
 import html2text
 import requests
 import string
+from magic import Magic
 from app.cipher import decrypt
 from app.workspace import Workspace, validate_workspace, update_workspace_ts
 from app.email import Email, EmailSchema
@@ -53,6 +54,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     result_id = db.Column(db.Integer, db.ForeignKey('result.id'), nullable=True)
     ip_address = db.Column(db.String(32))
+    user_agent = db.Column(db.String(128))
     action = db.Column(db.String(32))
     time = db.Column(db.DateTime)
     form = db.relationship('Form', backref='event', uselist=False, lazy=True, cascade='all,delete')
@@ -62,6 +64,7 @@ class EventSchema(Schema):
     id = fields.Number()
     result_id = fields.Number()
     ip_address = fields.Str()
+    user_agent = fields.Str()
     action = fields.Str()
     time = fields.DateTime(format='%m-%d-%y %H:%M:%S')
     form = fields.Nested(FormSchema, strict=True)
@@ -105,6 +108,8 @@ class Campaign(db.Model):
     batch_size = db.Column(db.Integer)
     payload_url = db.Column(db.String(64))
     payload_file = db.Column(db.String(64))
+    attachment = db.Column(db.LargeBinary, nullable=True)
+    attachment_name = db.Column(db.String(64), nullable=True)
     pages = db.relationship('Campaignpages', backref='campaign', cascade='all, delete-orphan')
 
 
@@ -196,6 +201,13 @@ class Campaign(db.Model):
                     msg.html = self.email.prep_html(base_url=base_url, target=recipient, result=result, url=url)
                     msg.body = html2text.html2text(msg.html.decode())
 
+                    if self.attachment:
+                        # Determine mimetype of attachment from bytes
+                        mime = Magic(mime=True)
+                        mimetype = mime.from_buffer(self.attachment)
+                        # attach the file
+                        msg.attach(self.attachment_name, mimetype, self.attachment)
+
                     status = ''
 
                     try:
@@ -261,6 +273,7 @@ class CampaignSchema(Schema):
     payload_url = fields.Str()
     start_time = fields.DateTime(format='%m-%d-%y %H:%M')
     payload_file = fields.Str()
+    attachment_name = fields.Str()
 
 
 class WorkerCampaignSchema(Schema):
