@@ -59,8 +59,8 @@ def roles():
 
         if role is not None:
             return json.dumps({'success': False}), 200, {'ContentType':'application/json'}
-        elif role_type.lower() not in ['administrator', 'user', 'client']:
-            return 'role type not admin, user, or client', 400
+        elif role_type.lower() not in ['administrator', 'user']: #, 'client']: # hide client role for now
+            return 'role type not admin or user', 400
         
         role = Role(name=name, role_type=role_type)
         if role.role_type.lower() in ['administrator', 'user']:
