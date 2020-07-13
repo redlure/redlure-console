@@ -28,7 +28,7 @@ redlure is comprised of three components:
 
 **Basic setup:**
 <p align="center">
-    <img src="assets/diagram.png" height="600px">
+    <img src="assets/diagram-v2.PNG" height="500px">
 </p>
 
 ## Project State
