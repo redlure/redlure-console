@@ -35,7 +35,8 @@ redlure is comprised of three components:
 redlure is in an ALPHA state. This means that it is working and usable within our environment, but we are unsure what difficulties may be experienced with redlure outside of our environment. Bugs are actively being discovered and fixed. 
 
 
-
+## Disclaimer
+This tool is designed for use during offensive security engagements, with explicit approval from client; usage of this tool without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse of this program.
 
 
 
