@@ -24,7 +24,7 @@ Use the [Wiki](https://github.com/redlure/redlure-console/wiki) to get started w
 redlure is comprised of three components:
 1. redlure-console - Centralized API the operator interacts with. Stores templates and tracks campaigns/results. Manages your redlure-workers. Written in Python using Flask.
 2. [redlure-worker](https://github.com/redlure/redlure-worker) - Skeletal API that manages the webserver for phishing campaigns. Multiple of these can and should be managed from a single console. Written in Python using Flask.
-3. [redlure-client](https://github.com/redlure/redlure-client) - Web interface for interacting with the console API. Written with the Angular 7 framework (Typescript and HTML)
+3. [redlure-client](https://github.com/redlure/redlure-client) - Web interface for interacting with the console API. Written with the Angular 10 framework (Typescript and HTML)
 
 **Basic setup:**
 <p align="center">
