@@ -51,7 +51,11 @@ class Profile(db.Model):
         msg = Message('redlure test', sender=self.from_address, recipients=[address])
         msg.html = "<text>This a test email sent from your redlure profile using Flask Mail</text>"
         msg.body = html2text.html2text(msg.html)
-        try:
+        
+        ts = datetime.now().strftime('%y%m%d.%H%M%S')
+        domain = app.config['MAIL_USERNAME'].split('@')[1]
+        msg.msgId = f'<{ts}@{domain}>'
+        try:    
             mail.send(msg)
             return True
         except Exception:

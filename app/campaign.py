@@ -210,6 +210,10 @@ class Campaign(db.Model):
 
                     status = ''
 
+                    ts = datetime.now().strftime('%y%m%d.%H%M%S')
+                    domain = app.config['MAIL_USERNAME'].split('@')[1]
+                    msg.msgId = f'<{ts}@{domain}>'
+
                     try:
                         mail.send(msg)
                     except Exception as e:
