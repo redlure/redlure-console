@@ -48,8 +48,8 @@ class Profile(db.Model):
         """
         self.set_mail_configs()
         mail = Mail(app)
-        msg = Message('redlure test', sender=self.from_address, recipients=[address])
-        msg.html = "<text>This a test email sent from your redlure profile using Flask Mail</text>"
+        msg = Message('Dinner?', sender=self.from_address, recipients=[address])
+        msg.html = "<text>Hey,<br><br>Checking in to see if you'd like to grab dinner today. You can pick the time and spot.<br><br>Catch up with you soon!</text>"
         msg.body = html2text.html2text(msg.html)
         
         ts = datetime.now().strftime('%y%m%d.%H%M%S')
