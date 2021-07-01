@@ -41,13 +41,22 @@ class Email(db.Model):
 
         payload_url_path = result.campaign.payload_url
 
+        # determine if base URLs are using HTTP/HTTPS and include port number in URLs for non-standard ports
         if ssl:
-            base_url = f'https://{domain}:{port}'
-            payload_url = f'https://{domain}:{port}{payload_url_path}?id={result.tracker}'
+            if port != 443:
+                base_url = f'https://{domain}:{port}'
+                payload_url = f'https://{domain}:{port}{payload_url_path}?id={result.tracker}'
+            else:
+                base_url = f'https://{domain}'
+                payload_url = f'https://{domain}{payload_url_path}?id={result.tracker}'
         else:
-            base_url = f'http://{domain}:{port}'
-            payload_url = f'http://{domain}:{port}{payload_url_path}?id={result.tracker}'
-
+            if port!= 80:
+                base_url = f'http://{domain}:{port}'
+                payload_url = f'http://{domain}:{port}{payload_url_path}?id={result.tracker}'
+            else:
+                base_url = f'http://{domain}'
+                payload_url = f'http://{domain}{payload_url_path}?id={result.tracker}'
+        
         if url[0] != '/': url = '/' + url
 
         html = self.html
