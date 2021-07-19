@@ -73,7 +73,7 @@ class Email(db.Model):
         soup.insert(1, base)
 
         if self.track:
-            tracker = soup.new_tag('img', alt='', src=f'{base_url}/{result.tracker}/pixel.png')
+            tracker = soup.new_tag('img', alt='', src=f'{base_url}/default/{result.tracker}/logo.png')
             soup.find('body').insert_after(tracker)
         html = str(soup).encode()
 
