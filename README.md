@@ -3,7 +3,7 @@ redlure is a phishing framework designed to advance pentest and red team phishin
 
 redlure's distributed architecture allows for multiple campaigns to be run on different ports and/or servers, while results are aggregated in a single interface. This allows you to generate phishing templates, target lists, start/stop campaigns, change domains, change ports and generate LetsEncrypt certs on multiple workers all from one interface. 
 
-redlure was released as a part of DEFCON 28 Demo Labs.
+redlure was released as a part of DEFCON 28 Demo Labs. ([Associated presentation/demo](https://www.youtube.com/watch?v=ZtCMnKHZJUM))
 ## redlure-console
 This is the main redlure repository. Use the [Wiki](https://github.com/redlure/redlure-console/wiki) to get started with the redlure-console or visit [Installation](https://github.com/redlure/redlure-console/wiki/Installation) for install instructions.
 
@@ -33,7 +33,7 @@ redlure is comprised of three components:
 </p>
 
 ## Project State
-redlure is in an ALPHA state. This means that it is working and usable within our environment, but we are unsure what difficulties may be experienced with redlure outside of our environment. Bugs are actively being discovered and fixed. 
+redlure is in an BETA state. It has been engagement-usable for my teams since early 2020. However, there 100% still bugs that you may discover while using it. Please submit an issue or a pull request if you identify one.
 
 
 ## Disclaimer
