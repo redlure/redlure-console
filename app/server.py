@@ -7,7 +7,7 @@ import requests
 import json
 from app.apikey import APIKey, require_api_key
 from app.functions import admin_login_required, user_login_required
-
+from app.redlure import MIN_SUPPORTED_WORKER, CONSOLE_VERSION
 
 ####################
 #  Server Classes
@@ -28,7 +28,7 @@ class Server(db.Model):
 
 
     def check_status(self):
-        params = {'key': APIKey.query.first().key}
+        params = {'key': APIKey.query.first().key, 'version': CONSOLE_VERSION}
         try:
             r = requests.post(f'https://{self.ip}:{self.port}/status', params=params, verify=False, timeout=8)
             if r.status_code == 200:
@@ -42,6 +42,7 @@ class Server(db.Model):
                 self.status = 'Offline'
         except:
             self.status = 'Offline'
+        
         db.session.commit()
         return self.status
 
@@ -199,7 +200,7 @@ def server_status(server_id):
     server_obj = Server.query.filter_by(id=server_id).first()
     if server_obj is None:
         return 'server does not exist', 404
-
+    
     status = server_obj.check_status()
     return json.dumps({'status': status}), 200, {'ContentType':'application/json'} 
 
@@ -276,6 +277,10 @@ def status():
     server = Server.query.filter_by(ip=ip).first()
     if server:
         app.logger.info(f'Received check-in from {server.alias} ({ip})')
+        worker_version = request.args.get('version')
+        if float(worker_version) < float(MIN_SUPPORTED_WORKER):
+            app.logger.warning(f'{server.alias} ({ip}) is running a version of the redlure worker unsupported by this console version')
+            return 'unsupported', 200
     else:
         app.logger.info(f'Received check-in from {ip}')
     return 'responsive', 200

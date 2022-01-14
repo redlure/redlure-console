@@ -21,6 +21,7 @@ from app.campaign import Campaign, Campaignpages, WorkerCampaignSchema
 from app.result import Result, Form, Event
 from app.server import Server
 from app.apikey import APIKey
+from app.redlure import CONSOLE_VERSION, MIN_SUPPORTED_CLIENT
 import urllib3
 
 # suppress insecure requests warning
@@ -72,6 +73,7 @@ def get_cipher():
     try:
         plain_text = decrypt(cipher_text)
         print(f'[+] {plain_text.decode()}\n{Color.end}')
+        print(f'[*] Your console requires redlure-client v{MIN_SUPPORTED_CLIENT} or newer')
     except InvalidToken:
         print(f'\n[!] Decryption failed - invalid passphrase{Color.end}')
         exit()
@@ -141,7 +143,9 @@ def banner():
 {Color.red} |  | \/\  ___// /_/ | {Color.gray}|  |_|  |  /|  | \/\  ___/ {Color.end}
 {Color.red} |__|    \___  >____ | {Color.gray}|____/____/ |__|    \___  >{Color.end}
 {Color.red}             \/     \/ {Color.gray}                        \/  {Color.end}
-    ''')
+    
+{Color.red}                      v{Color.gray}{CONSOLE_VERSION}          {Color.end}
+''')
 
 
 if __name__ == '__main__':
