@@ -33,7 +33,7 @@ redlure is comprised of three components:
 </p>
 
 ## Project State
-redlure is in an BETA state. It has been engagement-usable for my teams since early 2020. However, there 100% still bugs that you may discover while using it. Please submit an issue or a pull request if you identify one.
+redlure is in an BETA state. It has been engagement-usable for my teams since early 2020. However, there are 100% still bugs that you may discover while using it. Please submit an issue or a pull request if you identify one.
 
 
 ## Disclaimer
