@@ -17,7 +17,7 @@ This is the main redlure repository. Use the [Wiki](https://github.com/redlure/r
 * Chain webpage templates together for multi-step phishing (e.g. Office365, Gmail)
 * Workspaces to manage results and templates for each engagement
 * Partial database encryption (sensitive database columns only)
-* Generate LetsEncrypt certs remotely (other certificates can be manually specified)
+* Generate Let's Encrypt certs remotely (other certificates can be manually specified)
 * Manage payload delivery via automatic downloads or links and buttons
 * Role-based authentication
 
