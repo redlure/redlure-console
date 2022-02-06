@@ -1,7 +1,7 @@
 # The redlure Distributed Phishing Framework
 redlure is a phishing framework designed to advance pentest and red team phishing. It could also be utilized by blue teams looking to train employees through running realistic phishing scenarios. 
 
-redlure's distributed architecture allows for multiple campaigns to be run on different ports and/or servers, while results are aggregated in a single interface. This allows you to generate phishing templates, target lists, start/stop campaigns, change domains, change ports and generate LetsEncrypt certs on multiple workers all from one interface. 
+redlure's distributed architecture allows for multiple campaigns to be run on different ports and/or servers, while results are aggregated in a single interface. This allows you to generate phishing templates, target lists, start/stop campaigns, change domains, change ports and generate Let's Encrypt certs on multiple workers all from one interface. 
 
 redlure was released as a part of DEFCON 28 Demo Labs. ([Associated presentation/demo](https://www.youtube.com/watch?v=ZtCMnKHZJUM))
 ## redlure-console
@@ -17,7 +17,7 @@ This is the main redlure repository. Use the [Wiki](https://github.com/redlure/r
 * Chain webpage templates together for multi-step phishing (e.g. Office365, Gmail)
 * Workspaces to manage results and templates for each engagement
 * Partial database encryption (sensitive database columns only)
-* Generate LetsEncrypt certs remotely (other certificates can be manually specified)
+* Generate Let's Encrypt certs remotely (other certificates can be manually specified)
 * Manage payload delivery via automatic downloads or links and buttons
 * Role-based authentication
 
@@ -33,7 +33,7 @@ redlure is comprised of three components:
 </p>
 
 ## Project State
-redlure is in an BETA state. It has been engagement-usable for my teams since early 2020. However, there 100% still bugs that you may discover while using it. Please submit an issue or a pull request if you identify one.
+redlure is in an BETA state. It has been engagement-usable for my teams since early 2020. However, there are 100% still bugs that you may discover while using it. Please submit an issue or a pull request if you identify one.
 
 
 ## Disclaimer
