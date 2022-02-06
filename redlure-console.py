@@ -73,7 +73,6 @@ def get_cipher():
     try:
         plain_text = decrypt(cipher_text)
         print(f'[+] {plain_text.decode()}\n{Color.end}')
-        print(f'[*] Your console requires redlure-client v{MIN_SUPPORTED_CLIENT} or newer')
     except InvalidToken:
         print(f'\n[!] Decryption failed - invalid passphrase{Color.end}')
         exit()
@@ -145,7 +144,9 @@ def banner():
 {Color.red}             \/     \/ {Color.gray}                        \/  {Color.end}
     
 {Color.red}                      v{Color.gray}{CONSOLE_VERSION}          {Color.end}
+
 ''')
+    print(f'[*] Your console requires redlure-client v{MIN_SUPPORTED_CLIENT} or newer')
 
 
 if __name__ == '__main__':
