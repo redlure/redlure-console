@@ -16,7 +16,7 @@ bs4 = "*"
 flask-login = "*"
 flask-cors = "*"
 apscheduler = "*"
-lxml = "*"
+lxml = "4.6.5"
 html2text = "*"
 python-magic = "*"
 
