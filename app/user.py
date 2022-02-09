@@ -112,7 +112,7 @@ def users():
         db.session.commit()
         schema = UserSchema()
         user_data = schema.dump(user)
-        app.logger.info(f'New user {username} created as a {role} - Created by {current_user.username} - Client IP address {request.remote_addr}')
+        app.logger.info(f'New user {username} created as a {role.name} - Created by {current_user.username} - Client IP address {request.remote_addr}')
         return jsonify(user_data), 201
 
 
