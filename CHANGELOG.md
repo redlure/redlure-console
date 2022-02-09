@@ -8,3 +8,4 @@
     - Required DB schema update
 ### Changed
 - Updated `lxml` dependency 
+- Fixed role name in logging for newly created users
