@@ -67,7 +67,7 @@ def init_cipher():
 def get_cipher():
     cipher_text = CipherTest.query.first().value
     str = cipher_text.decode()
-    print(f'{Color.gray}{str[:len(str)//2]}\n{str[len(str)//2:]}{Color.end}\n')
+    print(f'\n{Color.gray}{str[:len(str)//2]}\n{str[len(str)//2:]}{Color.end}\n')
     passphrase = input(f'{Color.gray}[+] Enter the cipher passphrase: {Color.red}').encode()
     new_cipher_key(passphrase)
     try:

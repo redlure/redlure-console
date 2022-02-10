@@ -5,7 +5,7 @@ redlure's distributed architecture allows for multiple campaigns to be run on di
 
 redlure was released as a part of DEFCON 28 Demo Labs. ([Associated presentation/demo](https://www.youtube.com/watch?v=ZtCMnKHZJUM))
 ## redlure-console
-This is the main redlure repository. Use the [Wiki](https://github.com/redlure/redlure-console/wiki) to get started with the redlure-console or visit [Installation](https://github.com/redlure/redlure-console/wiki/Installation) for install instructions.
+This is the main redlure repository. Use the GitBook documentation on [docs.redlure.io](https://docs.redlure.io) to get started with the redlure-console or visit [Installation](https://docs.redlure.io/redlure-console/Installation.html) for install instructions.
 
 ## Sponsors
 <a href="https://schneiderdowns.com">

@@ -189,6 +189,7 @@ def campaigns(workspace_id):
         port = request.form.get('Port')
         ssl = request.form.get('SSL')
         redirect_url = request.form.get('Redirect_URL')
+        safety_url = request.form.get('Safety_URL')
         start_time = request.form.get('Start_Time')
         interval = request.form.get('Interval')
         batch_size =request.form.get('Batch_Size')
@@ -207,9 +208,6 @@ def campaigns(workspace_id):
             start_time = convert_to_datetime(start_time)
         else:
             start_time = datetime.now()
-        #print(type(start_time))
-        #print(start_time)
-
 
         ssl_bool = convert_to_bool(ssl)
         if type(ssl_bool) != bool:
@@ -235,7 +233,7 @@ def campaigns(workspace_id):
         campaign = Campaign(name=name, workspace_id=workspace_id, email_id=email.id, profile_id=profile.id, \
                 start_time=start_time, send_interval=interval, batch_size=batch_size, \
                 list_id=targetlist.id, domain_id=domain.id, server_id=server.id, port=port, ssl=ssl_bool, redirect_url=redirect_url, \
-                payload_url=payload_url, payload_file=payload_file, attachment=attach_bytes, attachment_name=attach_name)
+                safety_url=safety_url, payload_url=payload_url, payload_file=payload_file, attachment=attach_bytes, attachment_name=attach_name)
 
         db.session.add(campaign)
         update_workspace_ts(Workspace.query.filter_by(id=workspace_id).first())
