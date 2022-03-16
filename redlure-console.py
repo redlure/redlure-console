@@ -70,17 +70,32 @@ def init_cipher():
 
 
 def get_cipher():
-    cipher_text = CipherTest.query.first().value
-    str = cipher_text.decode()
-    print(f'\n{Color.gray}{str[:len(str)//2]}\n{str[len(str)//2:]}{Color.end}\n')
-    passphrase = input(f'{Color.gray}[+] Enter the cipher passphrase: {Color.red}').encode()
-    new_cipher_key(passphrase)
-    try:
-        plain_text = decrypt(cipher_text)
-        print(f'[+] {plain_text.decode()}\n{Color.end}')
-    except InvalidToken:
-        print(f'\n[!] Decryption failed - invalid passphrase{Color.end}')
-        exit()
+
+    if Config.PASSPHRASE != '':
+        passphrase = Config.PASSPHRASE.encode()
+        new_cipher_key(passphrase)
+        cipher_text = CipherTest.query.first().value
+        str = cipher_text.decode()
+        try:
+            plain_text = decrypt(cipher_text)
+            print(f'[+] {plain_text.decode()}\n{Color.end}')
+        except InvalidToken:
+            print(f'\n[!] Decryption failed - invalid passphrase{Color.end}')
+            exit()
+
+    else:
+    
+        cipher_text = CipherTest.query.first().value
+        str = cipher_text.decode()
+        print(f'\n{Color.gray}{str[:len(str)//2]}\n{str[len(str)//2:]}{Color.end}\n')
+        passphrase = input(f'{Color.gray}[+] Enter the cipher passphrase: {Color.red}').encode()
+        new_cipher_key(passphrase)
+        try:
+            plain_text = decrypt(cipher_text)
+            print(f'[+] {plain_text.decode()}\n{Color.end}')
+        except InvalidToken:
+            print(f'\n[!] Decryption failed - invalid passphrase{Color.end}')
+            exit()
 
 def init_db():
     if os.path.isdir('migrations'):
