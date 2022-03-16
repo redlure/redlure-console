@@ -7,3 +7,4 @@ class Config(object):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     CERT_PATH = 'redlure-cert.pem'
     KEY_PATH = 'redlure-key.pem'
+    PASSPHRASE = ''

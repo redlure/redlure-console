@@ -52,16 +52,21 @@ def make_shell_context():
 
 
 def init_cipher():
-    passphrase = ''
-    print(f'{Color.gray}[*] redlure encrypts sensitive database fields{Color.end}')
-    print(f'{Color.gray}[*] Enter a passphrase that will be used in generating the key\n{Color.end}')
-    while passphrase == '':
-        passphrase =  input(f'{Color.gray}[+] Passphrase: {Color.red}').encode()
-    print(f'\n[!] WARNING: Do not lose your passphrase - doing so will result in losing access to parts of your database{Color.end}')
 
-    new_cipher_key(passphrase)
+    if Config.PASSPHRASE != '':
+        passphrase = Config.PASSPHRASE
+        new_cipher_key(bytes(passphrase, 'utf-8'))
+    else:
+        passphrase = ''
+        print(f'{Color.gray}[*] redlure encrypts sensitive database fields{Color.end}')
+        print(f'{Color.gray}[*] Enter a passphrase that will be used in generating the key\n{Color.end}')
+        while passphrase == '':
+            passphrase =  input(f'{Color.gray}[+] Passphrase: {Color.red}').encode()
+        print(f'\n[!] WARNING: Do not lose your passphrase - doing so will result in losing access to parts of your database{Color.end}')
 
-    input(f'\n{Color.gray}[+] Press enter to continue: {Color.end}')
+        new_cipher_key(passphrase)
+
+        input(f'\n{Color.gray}[+] Press enter to continue: {Color.end}')
 
 
 def get_cipher():
@@ -159,8 +164,8 @@ if __name__ == '__main__':
 
     # check if db exists yet
     if not os.path.isfile('redlure.db'):
-        init_cipher()
-        init_db()
+            init_cipher()
+            init_db()
     else:
         get_cipher()
         check_campaigns()
