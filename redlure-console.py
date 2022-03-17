@@ -71,7 +71,7 @@ def init_cipher():
 
 def get_cipher():
 
-    if Config.PASSPHRASE != '':
+    if Config.PASSPHRASE != '' and os.path.isfile('redlure.db'):
         passphrase = Config.PASSPHRASE.encode()
         new_cipher_key(passphrase)
         cipher_text = CipherTest.query.first().value
@@ -83,8 +83,8 @@ def get_cipher():
             print(f'\n[!] Decryption failed - invalid passphrase{Color.end}')
             exit()
 
-    else:
-    
+    elif Config.PASSPHRASE == '' and os.path.isfile('redlure.db'):
+
         cipher_text = CipherTest.query.first().value
         str = cipher_text.decode()
         print(f'\n{Color.gray}{str[:len(str)//2]}\n{str[len(str)//2:]}{Color.end}\n')
