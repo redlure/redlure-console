@@ -72,10 +72,10 @@ def init_cipher():
 def get_cipher():
 
     if Config.PASSPHRASE != '' and os.path.isfile('redlure.db'):
-        passphrase = Config.PASSPHRASE.encode()
-        new_cipher_key(passphrase)
         cipher_text = CipherTest.query.first().value
         str = cipher_text.decode()
+        passphrase = Config.PASSPHRASE.encode()
+        new_cipher_key(passphrase)
         try:
             plain_text = decrypt(cipher_text)
             print(f'[+] {plain_text.decode()}\n{Color.end}')
