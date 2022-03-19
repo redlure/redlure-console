@@ -24,7 +24,7 @@ login.login_view = 'login'
 sched = BackgroundScheduler()
 sched.start()
 
-from app import apikey, campaign, cipher, domain, email, list, page, profile, result, role, server, user, workspace
+from app import apikey, campaign, cipher, domain, email, list, page, profile, result, role, server, user, workspace, evasion
 
 
 # create logs dir if it does not exist

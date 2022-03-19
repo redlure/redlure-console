@@ -21,6 +21,7 @@ from app.campaign import Campaign, Campaignpages, WorkerCampaignSchema
 from app.result import Result, Form, Event
 from app.server import Server
 from app.apikey import APIKey
+from app.evasion import Blocklist
 from app.redlure import CONSOLE_VERSION, MIN_SUPPORTED_CLIENT
 import urllib3
 
@@ -47,7 +48,8 @@ def make_shell_context():
         'APIKey': APIKey,
         'Form': Form,
         'Campaignpages': Campaignpages,
-        'Event': Event
+        'Event': Event,
+        'Blocklist': Blocklist
     }
 
 
@@ -174,4 +176,4 @@ if __name__ == '__main__':
     app.logger.info('redlure-console starting up')
     #server = subprocess.Popen(['gunicorn', 'app:app', '-b 0.0.0.0:5000', '--certfile', Config.CERT_PATH, '--keyfile', Config.KEY_PATH])
     #server.wait()
-    app.run(host='0.0.0.0', ssl_context=(Config.CERT_PATH, Config.KEY_PATH), use_reloader=False)
+    app.run(host='127.0.0.1', port=5000, ssl_context=(Config.CERT_PATH, Config.KEY_PATH), use_reloader=False)
