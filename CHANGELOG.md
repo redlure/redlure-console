@@ -1,4 +1,9 @@
 # Changelog
+## [v0.12] - 3/26/2022
+### Added
+- Passphrase var in config.py. Will be required for use with Docker in a future update
+### Changed
+- Handling of console startup to accomodate option of hardcoded passphrase
 
 ## [v0.11] - 2/6/2022
 ### Added
